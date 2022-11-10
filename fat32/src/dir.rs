@@ -94,7 +94,7 @@ impl Dir {
                             // 如果长文件名为空，说明是一个. 和 .. 目录
                             name = short_entry.filename();
                         }
-                        println!("name:{}",name);
+                        info!("name:{}",name);
                         full_long_entry.clear();
                         // 判断是文件还是目录
                         if short_entry.attr().contains(EntryFlags::DIRECTORY) {
@@ -108,6 +108,7 @@ impl Dir {
                             );
                             self.sub_directory.insert(name, Arc::new(RwLock::new(dir)));
                         } else {
+                            println!("file size:{}",short_entry.file_size());
                             let file = File::new(
                                 short_entry.start_cluster(),
                                 name.clone(),
@@ -167,15 +168,12 @@ impl Dir {
         short_name
     }
 
-    fn add_sub_dir_inner(&self,dir:Arc<RwLock<Dir>>,dtypr:DirEntryType,meta:Arc<MetaData>,fat:Arc<RwLock<Fat>>){
-
-    }
 
     fn make_entry(&self,name:&str,start_cluster:u32,dtype: DirEntryType)->Result<(ShortEntry,FullLoongEntry),()>{
         let short_name = self.name_to_short_name(name);
         warn!("short_name:{}", short_name);
         let attr = match dtype {
-            DirEntryType::Dir => EntryFlags::DIRECTORY,
+            DirEntryType::Dir|DirEntryType::Dot| DirEntryType::DotDot => EntryFlags::DIRECTORY,
             DirEntryType::File => EntryFlags::ARCHIVE,
             _ => EntryFlags::empty(),
         };
@@ -346,13 +344,20 @@ impl File {
             attributes: attr,
         }
     }
-    pub fn read(&self, offset: u32, size: u32, meta: Arc<MetaData>) -> Vec<u8> {
+    pub fn size(&self) -> u32 {
+        self.size
+    }
+    /// 处理文件大于一个簇的情况
+    /// todo!
+    pub fn read(&self, offset: u32, size: u32, meta: Arc<MetaData>,fat:Arc<RwLock<Fat>>) -> Vec<u8> {
         // 偏移量大于文件大小则直接返回空
+
         if offset >= self.size {
             return Vec::new();
         }
         // 最多只能读取文件的大小
         let mut size = min(size, self.size - offset);
+        println!("read file offset:{},size:{}",offset,size);
         // 起始扇区号
         let sector = meta.offset_of_cluster(self.start_cluster);
         let mut data = Vec::new();
@@ -362,7 +367,7 @@ impl File {
         let end_sector = sector + ((offset + size) / meta.bytes_per_sector as u32) as usize;
         let mut offset = offset;
 
-        for i in start_sector..end_sector {
+        for i in start_sector..=end_sector {
             let cache = get_block_cache_by_id(i);
             cache.read(0, |content: &Content| {
                 let content = content.read();
@@ -378,11 +383,11 @@ impl File {
     pub fn write(&self, offset: u32, data: Vec<u8>) {
         // TODO
     }
-    pub fn print_content(&self, meta: Arc<MetaData>) {
-        let content = self.read(0, self.size, meta);
-        let content = String::from_utf8_lossy(content.as_slice());
-        println!("{}", content.as_ref());
-    }
+    // pub fn print_content(&self, meta: Arc<MetaData>) {
+    //     let content = self.read(0, self.size, meta);
+    //     let content = String::from_utf8_lossy(content.as_slice());
+    //     println!("{}", content.as_ref());
+    // }
 }
 
 #[derive(PartialOrd, PartialEq)]

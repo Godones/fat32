@@ -93,11 +93,9 @@ impl Fat32 {
         Ok(lock.list())
     }
 
-    /// 创建一个文件
-    /// 必须保证路径中的目录都存在
-    pub fn create_file(&self,path:&str)->Result<(),CreateError>{
+    fn goto_dir(&self, path: &str) -> Result<Arc<RwLock<Dir>>, ()> {
         if !path.starts_with("/") {
-            return Err(CreateError::PathError);
+            return Err(());
         }
         let mut dir = self.root_dir.clone();
         let mut path = path.split("/").collect::<Vec<&str>>();
@@ -114,9 +112,20 @@ impl Fat32 {
                     drop(lock);
                     dir = d;
                 }
-                None => return Err(CreateError::DirNotFound),
+                None => return Err(()),
             }
         }
+        Ok(dir)
+    }
+    /// 创建一个文件
+    /// 必须保证路径中的目录都存在
+    pub fn create_file(&self,path:&str)->Result<(),CreateError>{
+        let dir = self.goto_dir(path);
+        let mut path = path.split("/").collect::<Vec<&str>>();
+        if dir.is_err(){
+            return Err(CreateError::DirNotFound);
+        }
+        let dir = dir.unwrap();
         let mut lock = dir.write();
         lock.load(self.meta_data.clone());
         drop(lock);
@@ -136,6 +145,7 @@ impl Fat32 {
         lock.add_sub_file(file,self.meta_data.clone(),self.fat.clone());
         Ok(())
     }
+
 
     /// 创建一个文件夹
     /// 解析文件夹路径，如果不存在则创建
@@ -209,6 +219,23 @@ impl Fat32 {
         }
         Ok(())
     }
+
+    /// 加载一个文件的内容
+    pub fn load_binary_data(&self,path:&str)->Result<Vec<u8>,()>{
+        let dir = self.goto_dir(path);
+        if dir.is_err(){
+            return Err(());
+        }
+        let dir = dir.unwrap();
+        let mut path = path.split("/").collect::<Vec<&str>>();
+        let file_name = path.last().unwrap();
+        let mut lock = dir.write();
+        let file = lock.find_file(file_name).ok_or(())?;
+        let mut lock = file.write();
+        let size = lock.size();
+        Ok(lock.read(0,size,self.meta_data.clone(),self.fat.clone()))
+    }
+
     pub fn sync(&self){
         sync();
     }
