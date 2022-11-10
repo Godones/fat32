@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+	"fat32",
+	"fat32-test"
+]
