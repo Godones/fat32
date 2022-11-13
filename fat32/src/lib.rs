@@ -4,14 +4,13 @@ mod cache;
 mod device;
 mod dir;
 mod entry;
-mod error;
 mod fat;
 mod layout;
 mod utils;
 
 extern crate alloc;
 
-
 pub use device::BlockDevice;
-pub use fat::Fat32;
+pub use dir::*;
+pub use fat::*;
 pub use layout::*;

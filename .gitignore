@@ -12,3 +12,6 @@ Cargo.lock
 **/*.rs.bk
 
 *.idea
+
+fat32-test/test.img
+fat32-test/test.hex

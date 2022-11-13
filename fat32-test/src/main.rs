@@ -1,30 +1,29 @@
 mod logging;
-
-use fat32::{BlockDevice, Fat32};
+use fat32::{BlockDevice, Fat32,};
+use fat32::{DirectoryLike, FileLike};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, Write};
-use std::mem::size_of;
 use std::sync::Mutex;
 fn main() {
     logging::init_logger();
     let device = FakeDevice::new();
     let fat32 = Fat32::new(device).unwrap();
-    println!("{:#x?}", fat32);
-    fat32
-        .list("/")
-        .unwrap()
-        .iter()
-        .for_each(|x| println!("{}", x));
-    fat32.create_dir("/test1").unwrap();
-    // fat32.create_file("/123.txt").unwrap();
+    let root = fat32.root_dir();
+    let ans = root.create_dir("test");
+    println!("{:?}", ans);
+    root.list().unwrap().iter().for_each(|name| {
+        println!("{}", name);
+    });
+    let dir = root.cd("test").unwrap();
+    dir.list().unwrap().iter().for_each(|name| {
+        println!("{}", name);
+    });
+    let ans = dir.create_file("test.txt");
+    println!("{ans:?}");
     fat32.sync();
-    fat32
-        .list("/test1")
-        .unwrap()
-        .iter()
-        .for_each(|x| println!("{}", x));
-
-    let txt = fat32.load_binary_data("/hello.txt").unwrap();
+    let file = dir.open("test.txt").unwrap();
+    println!("file size:{}", file.size());
+    let txt = file.read(0, 100).unwrap();
     println!("{}", core::str::from_utf8(txt.as_slice()).unwrap());
 }
 

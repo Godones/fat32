@@ -1,4 +1,4 @@
-use crate::cache::{get_block_cache_by_id, CacheManager, CACHE_MANAGER, sync};
+use crate::cache::{get_block_cache_by_id, sync, CacheManager, CACHE_MANAGER};
 use crate::device::{BlockDevice, DEVICE};
 use crate::dir::{Dir, DirEntryType, File};
 use crate::entry::{EntryFlags, LongEntry, ShortEntry};
@@ -13,9 +13,7 @@ use spin::{Mutex, RwLock};
 
 #[derive(Debug)]
 pub struct Fat32 {
-    meta_data: Arc<MetaData>,
-    fat: Arc<RwLock<Fat>>,
-    root_dir: Arc<RwLock<Dir>>,
+    root_dir: Arc<Dir>,
 }
 
 impl Fat32 {
@@ -53,216 +51,17 @@ impl Fat32 {
 
         let root_dir = Dir::new(
             meta_data.root_dir_cluster,
-            None,
-            "/".to_string(),
-            EntryFlags::DIRECTORY,
+            meta_data,
+            Arc::new(RwLock::new(fat)),
         );
         Ok(Fat32 {
-            meta_data: Arc::new(meta_data),
-            fat: Arc::new(RwLock::new(fat)),
-            root_dir: Arc::new(RwLock::new(root_dir)),
+            root_dir: Arc::new(root_dir),
         })
     }
-    pub fn list(&self, path: &str) -> Result<Vec<String>, ()> {
-        let mut dir = self.root_dir.clone();
-        let mut path = path.split("/");
-        let mut name = path.next();
-        while let Some(n) = name {
-            if n == "" {
-                name = path.next();
-                continue;
-            }
-            let mut lock = dir.write();
-            lock.load(self.meta_data.clone());
-            drop(lock);
-            let lock = dir.read();
-            let sub_dir = lock.cd(n);
-            match sub_dir {
-                Some(d) => {
-                    drop(lock);
-                    dir = d;
-                    name = path.next();
-                }
-                None => return Err(()),
-            }
-        }
-        let mut lock = dir.write();
-        lock.load(self.meta_data.clone());
-        drop(lock);
-        let lock = dir.read();
-        Ok(lock.list())
+    pub fn root_dir(&self) -> Arc<Dir> {
+        self.root_dir.clone()
     }
-
-    fn goto_dir(&self, path: &str) -> Result<Arc<RwLock<Dir>>, ()> {
-        if !path.starts_with("/") {
-            return Err(());
-        }
-        let mut dir = self.root_dir.clone();
-        let mut path = path.split("/").collect::<Vec<&str>>();
-        for sub_dir in path.iter().take(path.len()-1){
-            if  sub_dir.is_empty(){
-                continue;
-            }
-            let mut lock = dir.write();
-            lock.load(self.meta_data.clone());
-            drop(lock);
-            let lock = dir.read();
-            match lock.cd(sub_dir) {
-                Some(d) => {
-                    drop(lock);
-                    dir = d;
-                }
-                None => return Err(()),
-            }
-        }
-        Ok(dir)
-    }
-    /// 创建一个文件
-    /// 必须保证路径中的目录都存在
-    pub fn create_file(&self,path:&str)->Result<(),CreateError>{
-        let dir = self.goto_dir(path);
-        let mut path = path.split("/").collect::<Vec<&str>>();
-        if dir.is_err(){
-            return Err(CreateError::DirNotFound);
-        }
-        let dir = dir.unwrap();
-        let mut lock = dir.write();
-        lock.load(self.meta_data.clone());
-        drop(lock);
-        let mut  lock = dir.write();
-        let file_name = path.last().unwrap();
-        if lock.find_file(file_name).is_some(){
-            return Err(CreateError::FileExist);
-        }
-        let mut fat = self.fat.write();
-        let cluster = fat.alloc_cluster();
-        if cluster.is_none(){
-            return Err(CreateError::NoSpace);
-        }
-        let cluster = cluster.unwrap();
-        let file = File::new(cluster,file_name.to_string(),0,EntryFlags::ARCHIVE);
-        let file = Arc::new(RwLock::new(file));
-        lock.add_sub_file(file,self.meta_data.clone(),self.fat.clone());
-        Ok(())
-    }
-
-
-    /// 创建一个文件夹
-    /// 解析文件夹路径，如果不存在则创建
-    pub fn create_dir(&self, path: &str) -> Result<(), ()> {
-        if !path.starts_with("/") {
-            return Err(());
-        }
-        let path = path.split("/").collect::<Vec<&str>>();
-        let mut dir = self.root_dir.clone();
-        for i in 1..path.len() {
-            let name = path[i];
-            if name.is_empty() {
-                return Err(());
-            }
-            let mut lock = dir.write();
-            lock.load(self.meta_data.clone());
-            if let Some(entry) = lock.cd(name) {
-                drop(lock);
-                dir = entry
-            } else {
-                let cluster = self.fat.write().alloc_cluster();
-                if let Some(cluster) = cluster {
-                    info!("create dir {} at cluster {:?}", name, cluster);
-                    // 分配成功
-                    // 写入分配表
-                    self.fat.write().set_entry(cluster, FatEntry::Eof,DirEntryType::Dir);
-                    let parent = Arc::downgrade(&dir);
-                    let sub_dir = Dir::new(
-                        cluster,
-                        Some(parent),
-                        name.to_string(),
-                        EntryFlags::DIRECTORY,
-                    );
-                    let sub_dir = Arc::new(RwLock::new(sub_dir));
-
-                    lock.add_sub_dir(
-                        sub_dir.clone(),
-                        DirEntryType::Dir,
-                        self.meta_data.clone(),
-                        self.fat.clone(),
-                    );
-                    // 创建 . 和 .. 目录
-                    // 这两个目录不占用簇
-                    let sub_sub_dot =
-                        Dir::new(cluster, None, ".".to_string(), EntryFlags::DIRECTORY);
-                    let sub_sub_dot = Arc::new(RwLock::new(sub_sub_dot));
-                    // .. 目录指向父目录的簇
-                    let sub_sub_dot_dot = Dir::new(
-                        lock.start_cluster(),
-                        None,
-                        "..".to_string(),
-                        EntryFlags::DIRECTORY,
-                    );
-                    let sub_sub_dot_dot = Arc::new(RwLock::new(sub_sub_dot_dot));
-                    sub_dir.write().add_sub_dir(
-                        sub_sub_dot,
-                        DirEntryType::Dot,
-                        self.meta_data.clone(),
-                        self.fat.clone(),
-                    );
-                    sub_dir.write().add_sub_dir(
-                        sub_sub_dot_dot,
-                        DirEntryType::DotDot,
-                        self.meta_data.clone(),
-                        self.fat.clone(),
-                    );
-                } else {
-                    return Err(());
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// 加载一个文件的内容
-    pub fn load_binary_data(&self,path:&str)->Result<Vec<u8>,()>{
-        let dir = self.goto_dir(path);
-        if dir.is_err(){
-            return Err(());
-        }
-        let dir = dir.unwrap();
-        let mut path = path.split("/").collect::<Vec<&str>>();
-        let file_name = path.last().unwrap();
-        let mut lock = dir.write();
-        let file = lock.find_file(file_name).ok_or(())?;
-        let mut lock = file.write();
-        let size = lock.size();
-        Ok(lock.read(0,size,self.meta_data.clone(),self.fat.clone()))
-    }
-
-    pub fn sync(&self){
+    pub fn sync(&self) {
         sync();
     }
-}
-
-bitflags! {
-    pub struct OpenFlags: u32 {
-        const READ = 0b00000001;
-        const WRITE = 0b00000010;
-        const APPEND = 0b00000100;
-        const TRUNCATE = 0b00001000;
-        const CREATE = 0b00010000;
-        const EXCLUSIVE = 0b00100000;
-    }
-}
-
-#[derive(Debug)]
-pub enum CreateError {
-    PathError,
-    /// 目录不存在
-    DirNotFound,
-    /// 文件已存在
-    FileExist,
-    /// 磁盘空间不足
-    NoSpace,
-    /// 磁盘已满
-    DiskFull,
-    /// 磁盘错误
-    DiskError,
 }

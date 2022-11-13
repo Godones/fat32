@@ -29,3 +29,31 @@
 - 0x1A~0x1B：2 个字节，保留。
 
 - 0x1C~0x1F：4 个字节，文件名的第 12~13 个字符，未使用的字节用 0xFF 填充。
+
+
+
+## 设计草案
+
+
+
+
+
+## 缓存替换算法
+
+[lru - crates.io: Rust Package Registry](https://crates.io/crates/lru)
+
+
+
+
+
+## 参考资料
+
+[Paul's 8051 Code Library: Understanding the FAT32 Filesystem (pjrc.com)](https://www.pjrc.com/tech/8051/ide/fat32.html)
+
+[Implementing the FAT32 file system with Rust - SoByte](https://www.sobyte.net/post/2022-01/rust-fat32/)
+
+[FAT - OSDev Wiki](https://wiki.osdev.org/FAT32)
+
+[FAT32学习笔记1---FAT32格式初体验 - jasonactions - 博客园 (cnblogs.com)](https://www.cnblogs.com/smartjourneys/articles/8430375.html)
+
+[详解FAT32文件系统 - CharyGao - 博客园 (cnblogs.com)](https://www.cnblogs.com/Chary/p/12981056.html)

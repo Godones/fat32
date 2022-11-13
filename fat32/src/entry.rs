@@ -1,7 +1,11 @@
-use std::time;
-use bit_field::BitField;
+use std::cmp::min;
+use std::f32::consts::E;
 use crate::dir::Dir;
+use crate::utils::{u16_from_le_bytes, u32_from_le_bytes};
+use bit_field::BitField;
 use bitflags::bitflags;
+use std::time;
+use log::info;
 bitflags! {
     pub struct EntryFlags:u8{
         const READ_ONLY = 0b0000_0001;
@@ -50,6 +54,7 @@ impl FullLoongEntry {
         for entry in self.entries.iter() {
             filename.push_str(&entry.filename());
         }
+
         filename
     }
     pub fn clear(&mut self) {
@@ -67,6 +72,8 @@ impl FullLoongEntry {
         }
         // 不满足13个字符的最后一个entry
         // 其order为0x40|index
+        // 需要在字符串后面添加0x00
+        filename.push(0x00 as char);
         let mut entry = LongEntry::new(&filename, 0x40 | index, check_sum);
         entries.push(entry);
         Self { entries }
@@ -95,22 +102,29 @@ pub struct LongEntry {
 impl ShortEntry {
     pub fn new(name: &str, attr: EntryFlags, cluster: u32) -> Self {
         /// 长文件名需要截断并全部转换为大写
-        let (name,ext) = if name == "." || name==".."{
-            (name.to_string(),String::new())
-        }else {
-            let dot_index = name.rfind(".").unwrap_or(name.len());
+        let (name, ext) = if name == "." || name == ".." {
+            (name.to_string(), String::new())
+        } else {
+            // 从右向左找到第一个.的位置
+            let dot_index = name.rfind('.').unwrap_or(name.len());
+            let ext = if dot_index==name.len() {
+                String::new()
+            } else {
+                name[dot_index + 1..].to_string().to_uppercase()
+            };
             let name = name[..dot_index].to_uppercase();
-            let ext = name[dot_index..].to_uppercase();
-            (name,ext)
+            (name, ext)
         };
         let mut buffer = [0u8; 32];
         // 用空格填充
         buffer[0..8].fill(0x20);
         buffer[8..11].fill(0x20);
         // 写入文件名
-        buffer[0..name.len()].copy_from_slice(name.as_bytes());
+        let min_ = min(name.len(), 8);
+        buffer[0..min_].copy_from_slice(&name.as_bytes()[0..min_]);
         // 写入扩展名
-        buffer[8..8 + ext.len()].copy_from_slice(ext.as_bytes());
+        let min_ = min(ext.len(), 3);
+        buffer[8..8 + min_].copy_from_slice(&ext.as_bytes()[0..min_]);
         buffer[11] = attr.bits();
         // 写入起始簇号
         buffer[26..28].copy_from_slice(&cluster.to_le_bytes()[0..2]);
@@ -119,16 +133,16 @@ impl ShortEntry {
         //写入创建的时间
         buffer[13] = 124;
         buffer[14] = 188;
-        buffer[15]=  108;
+        buffer[15] = 108;
         buffer[16] = 106;
-        buffer[17] =  85;
-        buffer[18] =  106;
-        buffer[19] =  85;
-        buffer[22] =  188;
-        buffer[23] =  108;
-        buffer[24] =  106;
-        buffer[25] =  85;
-        
+        buffer[17] = 85;
+        buffer[18] = 106;
+        buffer[19] = 85;
+        buffer[22] = 188;
+        buffer[23] = 108;
+        buffer[24] = 106;
+        buffer[25] = 85;
+
         let short_entry = ShortEntry::from_buffer(&buffer);
         short_entry
     }
@@ -140,14 +154,14 @@ impl ShortEntry {
         ext.copy_from_slice(&buffer[8..11]);
         let attr = EntryFlags::from_bits_truncate(buffer[11]);
         let reserved = buffer[12];
-        let create_time = u16::from_le_bytes([buffer[13], buffer[14]]);
-        let create_date = u16::from_le_bytes([buffer[15], buffer[16]]);
-        let last_access_date = u16::from_le_bytes([buffer[17], buffer[18]]);
-        let cluster_high = u16::from_le_bytes([buffer[20], buffer[21]]);
-        let modify_time = u16::from_le_bytes([buffer[22], buffer[23]]);
-        let modify_date = u16::from_le_bytes([buffer[24], buffer[25]]);
-        let cluster_low = u16::from_le_bytes([buffer[26], buffer[27]]);
-        let file_size = u32::from_le_bytes([buffer[28], buffer[29], buffer[30], buffer[31]]);
+        let create_time = u16_from_le_bytes(&buffer[13..=14]);
+        let create_date = u16_from_le_bytes(&buffer[15..=16]);
+        let last_access_date = u16_from_le_bytes(&buffer[17..=18]);
+        let cluster_high = u16_from_le_bytes(&buffer[20..=21]);
+        let modify_time = u16_from_le_bytes(&buffer[22..=23]);
+        let modify_date = u16_from_le_bytes(&buffer[24..=25]);
+        let cluster_low = u16_from_le_bytes(&buffer[26..=27]);
+        let file_size = u32_from_le_bytes(&buffer[28..=31]);
         Self {
             name,
             ext,
@@ -288,30 +302,21 @@ impl LongEntry {
         }
     }
     pub fn filename(&self) -> String {
-        let mut name = Vec::new();
-        self.name1.iter().for_each(|c| {
-            if *c != 0xFFFF as u16 && *c != 0x0000 as u16 {
-                name.push(*c)
-            } else {
-                return;
-            }
-        });
-        self.name2.iter().for_each(|c| {
-            if *c != 0xFFFF as u16 && *c != 0x0000 as u16 {
-                name.push(*c)
-            } else {
-                return;
-            }
-        });
-        self.name3.iter().for_each(|c| {
-            if *c != 0xFFFF as u16 && *c != 0x0000 as u16 {
-                name.push(*c)
-            } else {
-                return;
-            }
-        });
-
-        String::from_utf16(&name).unwrap()
+        let mut s_name = [
+            self.name1.as_slice(),
+            self.name2.as_slice(),
+            self.name3.as_slice(),
+        ]
+        .iter()
+        .map(|&c| c.iter().map(|c| *c).collect::<Vec<u16>>())
+        .flatten()
+        .collect::<Vec<u16>>();
+        let (index, _) = s_name
+            .iter()
+            .enumerate()
+            .rfind(|(i, &c)| c == 0)
+            .unwrap_or((13, &0));
+        String::from_utf16(&s_name[0..index]).unwrap()
     }
 
     pub fn to_buffer(&self) -> [u8; 32] {
@@ -344,4 +349,56 @@ impl LongEntry {
         );
         buffer
     }
+    pub fn check_sum(&self) -> u8 {
+        self.checksum
+    }
 }
+
+
+#[test]
+fn test_short_entry_new(){
+    let short_entry = ShortEntry::new("test.txt", EntryFlags::DIRECTORY, 0);
+    assert_eq!(short_entry.filename(), "TEST.TXT");
+    assert_eq!(short_entry.name, [0x54u8, 0x45, 0x53, 0x54, 0x20, 0x20, 0x20,0x20].as_ref());
+    assert_eq!(short_entry.ext, [0x54u8, 0x58, 0x54].as_ref());
+    assert_eq!(short_entry.file_size, 0);
+    assert_eq!(short_entry.start_cluster(), 0);
+    let entry = ShortEntry::new("hhhhhhhhhhh",EntryFlags::DIRECTORY,0);
+    assert_eq!(entry.filename(), "HHHHHHHH");
+    let entry = ShortEntry::new("hhhhhhhhhhhh.txtx",EntryFlags::DIRECTORY,0);
+    assert_eq!(entry.filename(), "HHHHHHHH.TXT");
+}
+
+
+#[test]
+fn test_short_entry_from_buffer(){
+    let mut buffer = [0u8; 32];
+    buffer[0..12].fill(0x20);
+    buffer[0] = 0x54;
+    buffer[1] = 0x45;
+    buffer[2] = 0x53;
+    buffer[3] = 0x54;
+    buffer[8] = 0x54;
+    buffer[9] = 0x58;
+    buffer[10] = 0x54;
+    let short_entry = ShortEntry::from_buffer(&buffer);
+    assert_eq!(short_entry.filename(), "TEST.TXT");
+    assert_eq!(short_entry.name, [0x54u8, 0x45, 0x53, 0x54, 0x20, 0x20, 0x20,0x20].as_ref());
+    assert_eq!(short_entry.ext, [0x54u8, 0x58, 0x54].as_ref());
+    assert_eq!(short_entry.file_size, 0);
+    assert_eq!(short_entry.start_cluster(), 0);
+}
+
+#[test]
+fn test_short_entry_to_buffer(){
+    let short_entry = ShortEntry::new("test.txt", EntryFlags::DIRECTORY, 0);
+    let buffer = short_entry.to_buffer();
+    assert_eq!(buffer[0..11], [0x54u8, 0x45, 0x53, 0x54, 0x20, 0x20, 0x20,0x20, 0x54, 0x58, 0x54]);
+}
+
+#[test]
+fn test_short_entry_checksum(){
+    let short_entry = ShortEntry::new("hello", EntryFlags::DIRECTORY, 0);
+    assert_eq!(short_entry.checksum(), 0x14);
+}
+

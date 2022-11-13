@@ -104,7 +104,17 @@ impl Cache for CacheManager {
             Some(cache) => cache.clone(),
             None => {
                 if self.cache.len() == self.size {
-                    self.cache.pop_front();
+                    // 找到引用计数为1的cache，即没有被其他线程引用的cache
+                    let change = self
+                        .cache
+                        .iter()
+                        .enumerate()
+                        .find(|(index, cache)| Arc::strong_count(cache) == 1);
+                    if change.is_none() {
+                        panic!("no cache can be replaced");
+                    }
+                    let (index, cache) = change.unwrap();
+                    self.cache.remove(index);
                 }
                 let mut buffer = [0u8; BLOCK_SIZE];
                 DEVICE.get().unwrap().lock().read(id, &mut buffer).unwrap();
@@ -125,6 +135,6 @@ pub fn get_block_cache_by_id(block_id: usize) -> Arc<BlockCache> {
     unsafe { CACHE_MANAGER.get_mut().unwrap().get_cache_by_id(block_id) }
 }
 
-pub fn sync(){
+pub fn sync() {
     unsafe { CACHE_MANAGER.get_mut().unwrap().sync() }
 }

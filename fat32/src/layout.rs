@@ -1,4 +1,5 @@
 use crate::cache::{get_block_cache_by_id, BlockCache};
+use crate::dir::DirEntryType;
 use crate::utils::u32_from_le_bytes;
 use crate::utils::{BLOCK_SIZE, ENTRY_PER_SECTOR};
 use crate::BlockDevice;
@@ -6,7 +7,6 @@ use core::fmt::{Debug, Formatter, Pointer};
 use core::marker::PhantomData;
 use spin::Once;
 use std::sync::Arc;
-use crate::dir::DirEntryType;
 
 pub type EntryBytes = [u8; 32];
 
@@ -30,9 +30,10 @@ pub trait BPB {
     /// 拿到根目录的起始扇区
     fn root_dir_start_sector(&self) -> usize;
     /// 根据数据区的簇号得到数据区的起始扇区
-    fn offset_of_cluster(&self, cluster: u32) -> usize;
+    fn cluster_to_sector(&self, cluster: u32) -> usize;
     fn sectors_per_fat_32(&self) -> usize;
     fn free_cluster_count(&self) -> u32;
+    fn bytes_per_cluster(&self) -> u32;
 }
 
 impl BPB for MetaData {
@@ -45,7 +46,7 @@ impl BPB for MetaData {
         self.fat_start_sector() + self.number_of_fats as usize * self.sectors_per_fat_32 as usize
     }
     #[inline]
-    fn offset_of_cluster(&self, cluster: u32) -> usize {
+    fn cluster_to_sector(&self, cluster: u32) -> usize {
         self.root_dir_start_sector() + (cluster - 2) as usize * self.sectors_per_cluster as usize
     }
     #[inline]
@@ -58,6 +59,10 @@ impl BPB for MetaData {
         (self.total_sectors_32 - self.root_dir_start_sector() as u32)
             / self.sectors_per_cluster as u32
             - 2
+    }
+
+    fn bytes_per_cluster(&self) -> u32 {
+        self.bytes_per_sector as u32 * self.sectors_per_cluster as u32
     }
 }
 
@@ -100,7 +105,7 @@ impl Fat {
             _ => FatEntry::Cluster(entry),
         }
     }
-    pub fn set_entry(&self, cluster: u32, entry: FatEntry,dirtype:DirEntryType) {
+    pub fn set_entry(&self, cluster: u32, entry: FatEntry, dirtype: DirEntryType) {
         let fat_sector = self.meta_data.fat_start_sector() + (cluster as usize * 4) / BLOCK_SIZE;
         let fat_offset = (cluster as usize * 4) % BLOCK_SIZE;
         let mut sector_cache = get_block_cache_by_id(fat_sector);
@@ -113,7 +118,7 @@ impl Fat {
                 } else {
                     [0xFF, 0xFF, 0xFF, 0x0F]
                 }
-            },
+            }
             FatEntry::Cluster(entry) => entry.to_le_bytes(),
         };
         sector_cache.write(fat_offset, |val: &mut u32| {
@@ -145,24 +150,44 @@ impl Fat {
         }
     }
 
+    pub fn get_entry_chain(&self, cluster: u32) -> Vec<u32> {
+        let mut chain = Vec::new();
+        let mut cluster = cluster;
+        let mut entry = self.get_entry(cluster);
+        loop {
+            match entry {
+                FatEntry::Eof => {
+                    chain.push(cluster);
+                    return chain;
+                }
+                FatEntry::Cluster(next) => {
+                    chain.push(cluster);
+                    entry = self.get_entry(next);
+                    cluster = next;
+                }
+                _ => {
+                    panic!("bad cluster chain");
+                }
+            }
+        }
+    }
 
-    pub fn print_usage(&self){
+    pub fn print_usage(&self) {
         let start = self.meta_data.fat_start_sector();
         let end = start + self.meta_data.sectors_per_fat_32() as usize;
-        'outer:
-        for i in start..end{
+        'outer: for i in start..end {
             let sector_cache = get_block_cache_by_id(i);
             let mut flag = false;
-            sector_cache.read(0, |content:&Content| {
-                for val in content.iter::<u32>(){
-                    if *val==0{
+            sector_cache.read(0, |content: &Content| {
+                for val in content.iter::<u32>() {
+                    if *val == 0 {
                         flag = true;
                         break;
                     }
-                    println!("{:#x?}",*val);
+                    println!("{:#x?}", *val);
                 }
             });
-            if flag{
+            if flag {
                 break 'outer;
             }
         }
