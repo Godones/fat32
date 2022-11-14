@@ -2,7 +2,7 @@ use crate::device::DEVICE;
 use crate::utils::BLOCK_SIZE;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use log::error;
+use log::{error, info};
 use spin::{Once, RwLock};
 
 /// 需要使用读写锁保护数据，防止多个线程同时访问
@@ -26,7 +26,6 @@ impl BlockCache {
 
     fn addr_of_offset(&self, offset: usize) -> usize {
         let inner = self.inner.read();
-        let s = &(*inner).data[offset..offset + 4];
         let x = &(*inner).data[offset] as *const _ as usize;
         x
     }
@@ -61,11 +60,12 @@ impl BlockCache {
     }
 
     pub fn sync(&self) {
-        let inner = self.inner.read();
+        let mut inner = self.inner.write();
         let data = ((*inner).data).as_ref();
-        error!("sync block {}", self.id);
         if inner.dirty {
+            info!("sync block {}", self.id);
             DEVICE.get().unwrap().lock().write(self.id, data).unwrap();
+            (*inner).dirty = false;
         }
     }
 }
@@ -126,6 +126,8 @@ impl Cache for CacheManager {
     }
     fn sync(&self) {
         for cache in self.cache.iter() {
+            let refcount = Arc::strong_count(cache);
+            info!("ref count: {}", refcount);
             cache.sync();
         }
     }

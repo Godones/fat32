@@ -1,11 +1,11 @@
-use std::cmp::min;
-use std::f32::consts::E;
 use crate::dir::Dir;
 use crate::utils::{u16_from_le_bytes, u32_from_le_bytes};
 use bit_field::BitField;
 use bitflags::bitflags;
+use log::{info, warn};
+use std::cmp::min;
+use std::f32::consts::E;
 use std::time;
-use log::info;
 bitflags! {
     pub struct EntryFlags:u8{
         const READ_ONLY = 0b0000_0001;
@@ -51,7 +51,7 @@ impl FullLoongEntry {
     }
     pub fn filename(&self) -> String {
         let mut filename = String::new();
-        for entry in self.entries.iter() {
+        for entry in self.entries.iter().rev() {
             filename.push_str(&entry.filename());
         }
 
@@ -69,6 +69,7 @@ impl FullLoongEntry {
             let mut entry = LongEntry::new(&filename, index, check_sum);
             entries.push(entry);
             filename = name;
+            index += 1;
         }
         // 不满足13个字符的最后一个entry
         // 其order为0x40|index
@@ -107,7 +108,7 @@ impl ShortEntry {
         } else {
             // 从右向左找到第一个.的位置
             let dot_index = name.rfind('.').unwrap_or(name.len());
-            let ext = if dot_index==name.len() {
+            let ext = if dot_index == name.len() {
                 String::new()
             } else {
                 name[dot_index + 1..].to_string().to_uppercase()
@@ -316,7 +317,8 @@ impl LongEntry {
             .enumerate()
             .rfind(|(i, &c)| c == 0)
             .unwrap_or((13, &0));
-        String::from_utf16(&s_name[0..index]).unwrap()
+        let name = String::from_utf16(&s_name[0..index]).unwrap();
+        name
     }
 
     pub fn to_buffer(&self) -> [u8; 32] {
@@ -354,24 +356,25 @@ impl LongEntry {
     }
 }
 
-
 #[test]
-fn test_short_entry_new(){
+fn test_short_entry_new() {
     let short_entry = ShortEntry::new("test.txt", EntryFlags::DIRECTORY, 0);
     assert_eq!(short_entry.filename(), "TEST.TXT");
-    assert_eq!(short_entry.name, [0x54u8, 0x45, 0x53, 0x54, 0x20, 0x20, 0x20,0x20].as_ref());
+    assert_eq!(
+        short_entry.name,
+        [0x54u8, 0x45, 0x53, 0x54, 0x20, 0x20, 0x20, 0x20].as_ref()
+    );
     assert_eq!(short_entry.ext, [0x54u8, 0x58, 0x54].as_ref());
     assert_eq!(short_entry.file_size, 0);
     assert_eq!(short_entry.start_cluster(), 0);
-    let entry = ShortEntry::new("hhhhhhhhhhh",EntryFlags::DIRECTORY,0);
+    let entry = ShortEntry::new("hhhhhhhhhhh", EntryFlags::DIRECTORY, 0);
     assert_eq!(entry.filename(), "HHHHHHHH");
-    let entry = ShortEntry::new("hhhhhhhhhhhh.txtx",EntryFlags::DIRECTORY,0);
+    let entry = ShortEntry::new("hhhhhhhhhhhh.txtx", EntryFlags::DIRECTORY, 0);
     assert_eq!(entry.filename(), "HHHHHHHH.TXT");
 }
 
-
 #[test]
-fn test_short_entry_from_buffer(){
+fn test_short_entry_from_buffer() {
     let mut buffer = [0u8; 32];
     buffer[0..12].fill(0x20);
     buffer[0] = 0x54;
@@ -383,22 +386,27 @@ fn test_short_entry_from_buffer(){
     buffer[10] = 0x54;
     let short_entry = ShortEntry::from_buffer(&buffer);
     assert_eq!(short_entry.filename(), "TEST.TXT");
-    assert_eq!(short_entry.name, [0x54u8, 0x45, 0x53, 0x54, 0x20, 0x20, 0x20,0x20].as_ref());
+    assert_eq!(
+        short_entry.name,
+        [0x54u8, 0x45, 0x53, 0x54, 0x20, 0x20, 0x20, 0x20].as_ref()
+    );
     assert_eq!(short_entry.ext, [0x54u8, 0x58, 0x54].as_ref());
     assert_eq!(short_entry.file_size, 0);
     assert_eq!(short_entry.start_cluster(), 0);
 }
 
 #[test]
-fn test_short_entry_to_buffer(){
+fn test_short_entry_to_buffer() {
     let short_entry = ShortEntry::new("test.txt", EntryFlags::DIRECTORY, 0);
     let buffer = short_entry.to_buffer();
-    assert_eq!(buffer[0..11], [0x54u8, 0x45, 0x53, 0x54, 0x20, 0x20, 0x20,0x20, 0x54, 0x58, 0x54]);
+    assert_eq!(
+        buffer[0..11],
+        [0x54u8, 0x45, 0x53, 0x54, 0x20, 0x20, 0x20, 0x20, 0x54, 0x58, 0x54]
+    );
 }
 
 #[test]
-fn test_short_entry_checksum(){
+fn test_short_entry_checksum() {
     let short_entry = ShortEntry::new("hello", EntryFlags::DIRECTORY, 0);
     assert_eq!(short_entry.checksum(), 0x14);
 }
-

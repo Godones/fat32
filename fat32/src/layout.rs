@@ -9,6 +9,7 @@ use spin::Once;
 use std::sync::Arc;
 
 pub type EntryBytes = [u8; 32];
+pub type SectorData = [u8; BLOCK_SIZE];
 
 /// 只包含部分需要的BPB参数
 #[derive(Debug, Copy, Clone)]
@@ -101,7 +102,7 @@ impl Fat {
         match entry {
             0x00000000 => FatEntry::Free,
             0xFFFFFFF7 => FatEntry::Bad,
-            0x0FFFFFF8..0x0FFFFFFF => FatEntry::Eof,
+            0x0FFFFFF8..=0x0FFFFFFF => FatEntry::Eof,
             _ => FatEntry::Cluster(entry),
         }
     }
@@ -150,7 +151,7 @@ impl Fat {
         }
     }
 
-    pub fn get_entry_chain(&self, cluster: u32) -> Vec<u32> {
+    pub fn get_cluster_chain(&self, cluster: u32) -> Vec<u32> {
         let mut chain = Vec::new();
         let mut cluster = cluster;
         let mut entry = self.get_entry(cluster);
@@ -166,7 +167,7 @@ impl Fat {
                     cluster = next;
                 }
                 _ => {
-                    panic!("bad cluster chain");
+                    panic!("bad cluster chain :{:?}", entry);
                 }
             }
         }
@@ -254,6 +255,9 @@ impl Content {
     }
     pub fn read(&self) -> &[u8] {
         &self.data
+    }
+    pub fn write(&mut self) -> &mut [u8] {
+        &mut self.data
     }
 }
 
