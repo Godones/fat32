@@ -25,6 +25,7 @@ impl FakeDevice {
 }
 
 impl BlockDevice for FakeDevice {
+    type Error = ();
     fn read(&self, block: usize, buf: &mut [u8]) -> Result<usize, ()> {
         let mut file = self.file.lock().unwrap();
         file.seek(std::io::SeekFrom::Start(block as u64 * 512))

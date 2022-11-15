@@ -1,5 +1,6 @@
 use crate::device::DEVICE;
 use crate::utils::BLOCK_SIZE;
+use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use log::info;
@@ -26,8 +27,7 @@ impl BlockCache {
 
     fn addr_of_offset(&self, offset: usize) -> usize {
         let inner = self.inner.read();
-        let x = &(*inner).data[offset] as *const _ as usize;
-        x
+        &(*inner).data[offset] as *const _ as usize
     }
 
     pub fn get_ref<T>(&self, offset: usize) -> &T
@@ -47,7 +47,7 @@ impl BlockCache {
         assert!(offset + type_size <= BLOCK_SIZE);
         let addr = self.addr_of_offset(offset);
         let mut inner = self.inner.write();
-        (*inner).dirty = true;
+        inner.dirty = true;
         unsafe { &mut *(addr as *mut T) }
     }
 
@@ -65,7 +65,7 @@ impl BlockCache {
         if inner.dirty {
             info!("sync block {}", self.id);
             DEVICE.get().unwrap().lock().write(self.id, data).unwrap();
-            (*inner).dirty = false;
+            inner.dirty = false;
         }
     }
 }

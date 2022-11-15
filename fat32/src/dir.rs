@@ -4,15 +4,18 @@
 //!
 use crate::cache::get_block_cache_by_id;
 use crate::entry::{EntryFlags, FullLoongEntry, LongEntry, ShortEntry};
+use crate::layout::{Bpb, Content, EntryBytes, Fat, FatEntry, MetaData, SectorData};
 use crate::utils::u32_from_le_bytes;
-use crate::{Content, EntryBytes, Fat, FatEntry, MetaData, SectorData, BPB};
+
 use alloc::collections::BTreeMap;
+use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::cmp::{max, min};
 use core::ops::Range;
 use log::{info, trace};
 use spin::RwLock;
-use thiserror::Error;
 
 #[derive(Debug, Clone)]
 pub struct Dir {
@@ -116,7 +119,7 @@ impl Dir {
                                     let dir = Dir::empty(
                                         start_cluster,
                                         (i, index * 32),
-                                        self.meta.clone(),
+                                        self.meta,
                                         self.fat.clone(),
                                     );
                                     sub_dir.insert(name, dir);
@@ -126,7 +129,7 @@ impl Dir {
                                     let file = File::new(
                                         start_cluster,
                                         (i, index * 32),
-                                        self.meta.clone(),
+                                        self.meta,
                                         self.fat.clone(),
                                     );
                                     files.insert(name, file);
@@ -144,43 +147,50 @@ impl Dir {
     /// 处理目录项名称
     /// 1.当文件名小于8个字符时，不用关心
     /// 2.当文件名大于8个字符，需要查找当前目录下是否有同名的文件，如果有，需要在文件名后面加上数字
-    fn name_to_short_name(&self, name: &str) -> String {
-        let sub_dirs = self.sub_dirs.read();
-        let files = self.files.read();
+    fn name_to_short_name(&self, name: &str, dtype: DirEntryType) -> String {
         if name == "." || name == ".." {
             return name.to_string();
         }
         let mut short_name;
         let mut name = name.to_string();
         let mut ext = String::new();
-        if name.contains(".") {
-            let mut split = name.rsplitn(2, ".");
+        if name.contains('.') {
+            let mut split = name.rsplitn(2, '.');
             ext = split.next().unwrap().to_string();
             name = split.next().unwrap().to_string();
         };
         if name.len() > 8 {
             // 查找是否有同名的文件
             let mut i = 1;
-            sub_dirs.iter().for_each(|(key, _)| {
-                if key.starts_with(&name) {
-                    i += 1;
+            match dtype {
+                DirEntryType::Dir => {
+                    let sub_dirs = self.sub_dirs.read();
+                    sub_dirs.iter().for_each(|(key, _)| {
+                        if key.starts_with(&name) {
+                            i += 1;
+                        }
+                    });
                 }
-            });
-            files.iter().for_each(|(key, _)| {
-                if key.starts_with(&name) {
-                    i += 1;
+                DirEntryType::File => {
+                    let files = self.files.read();
+                    files.iter().for_each(|(key, _)| {
+                        if key.starts_with(&name) {
+                            i += 1;
+                        }
+                    });
                 }
-            });
+                _ => {}
+            }
             // 计算数字的长度
             // 0-999999
             let num = i.to_string();
             let name = name.chars().take(8 - num.len() - 1).collect::<String>();
-            short_name = format!("{}~{}", name, num);
+            short_name = format!("{name}~{num}");
         } else {
             short_name = name;
         }
-        if ext.len() != 0 {
-            short_name = format!("{}.{}", short_name, ext);
+        if !ext.is_empty() {
+            short_name = format!("{short_name}.{ext}");
         }
         if short_name.len() > 11 {
             short_name = short_name.chars().take(11).collect::<String>();
@@ -195,7 +205,6 @@ impl Dir {
         start_cluster: u32,
         dtype: DirEntryType,
     ) -> Result<(ShortEntry, FullLoongEntry), OperationError> {
-        // let short_name = self.name_to_short_name(name);
         info!("name {name}'s short_name is {}", short_name);
         let attr = match dtype {
             DirEntryType::Dir | DirEntryType::Dot | DirEntryType::DotDot => EntryFlags::DIRECTORY,
@@ -208,7 +217,7 @@ impl Dir {
         let full_long_entry = match dtype {
             DirEntryType::Dot | DirEntryType::DotDot => FullLoongEntry::new(),
             DirEntryType::Dir | DirEntryType::File => {
-                FullLoongEntry::from_file_name(&name, short_entry.checksum())
+                FullLoongEntry::from_file_name(name, short_entry.checksum())
             }
         };
         info!("full_long_entry:{:#?}", full_long_entry);
@@ -231,15 +240,14 @@ impl Dir {
                 let entry_bytes = &content[i * 32..(i + 1) * 32];
                 if entry_bytes[0] == 0x00 || entry_bytes[0] == 0xE5 {
                     // 找到空闲目录项，判断是否是与之前找到的目录项连续
-                    if collect.len() == 0 {
+                    if collect.is_empty() {
                         collect.push((index, j, i));
                     } else {
                         let (last_index, last_j, last_i) = collect.last().unwrap();
-                        if index == *last_index && j == *last_j && i == *last_i + 1 {
-                            collect.push((index, j, i));
-                        } else if index == *last_index && j == *last_j + 1 && i == 0 {
-                            collect.push((index, j, i));
-                        } else if index == *last_index + 1 && j == 0 && i == 0 {
+                        if (index == *last_index && j == *last_j && i == *last_i + 1)
+                            || (index == *last_index && j == *last_j + 1 && i == 0)
+                            || (index == *last_index + 1 && j == 0 && i == 0)
+                        {
                             collect.push((index, j, i));
                         } else {
                             collect.clear();
@@ -268,6 +276,7 @@ impl Dir {
         collect.reserve(need); // 预分配空间
         let mut find_flag = false;
 
+        trace!("begin to find entries");
         for (index, &cluster) in cluster_chain.iter().enumerate() {
             let start_sector = self.meta.cluster_to_sector(cluster);
             let end_sector = start_sector + self.meta.sectors_per_cluster as usize;
@@ -316,10 +325,11 @@ impl Dir {
         &self,
         short_entry: &ShortEntry,
         full_long_entry: &FullLoongEntry,
-        target_sectors: &Vec<(usize, usize)>,
+        target_sectors: &[(usize, usize)],
     ) -> Result<(usize, usize), OperationError> {
-        // / 将长目录项写入到磁盘中
+        // 将长目录项写入到磁盘中
         // 倒序写入
+        trace!("write long entries....");
         full_long_entry
             .iter()
             .rev()
@@ -333,12 +343,14 @@ impl Dir {
                 });
             });
         // 将短目录项写入到磁盘中
+        trace!("write short entry....");
         let (sector, offset) = target_sectors[full_long_entry.len()];
         let cache = get_block_cache_by_id(sector);
         cache.write(offset * 32, |content: &mut EntryBytes| {
             let entry = short_entry.to_buffer();
             content.copy_from_slice(&entry);
         });
+        trace!("write entry success....");
         Ok((sector, offset * 32))
     }
     fn clusters_to_sectors(&self) -> Vec<Range<usize>> {
@@ -352,8 +364,6 @@ impl Dir {
         });
         ans
     }
-    /// 创建.和..目录项
-    /// 这两个目录项不占用磁盘空间
     fn add_dir_or_file(
         &self,
         name: &str,
@@ -381,14 +391,14 @@ impl Dir {
         &self,
         start_cluster: u32,
         address: (usize, usize),
-        cluster_chain: &Vec<u32>,
+        cluster_chain: &[u32],
     ) -> Result<(), OperationError> {
         let ans = cluster_chain.iter().enumerate().find(|(_i, &cluster)| {
             let s_sector = self.meta.cluster_to_sector(cluster);
             let e_sector = s_sector + self.meta.sectors_per_cluster as usize;
             (s_sector..e_sector).contains(&address.0)
         });
-        assert_eq!(ans.is_some(), true); //
+        assert!(ans.is_some()); //
         let (index, _) = ans.unwrap();
         // 处理目录项跨扇区或者跨簇的情况
         let cache = get_block_cache_by_id(address.0);
@@ -451,7 +461,6 @@ impl Dir {
                     // 如果是段目录项，则直接返回
                     flag = true;
                     trace!("stop find long entry");
-                    return;
                 }
             });
             if flag {
@@ -466,12 +475,7 @@ impl Dir {
         if self.sub_dirs.read().is_empty() && self.files.read().is_empty() {
             return Ok(());
         }
-        let file_names = self
-            .files
-            .read()
-            .keys()
-            .map(|name| name.clone())
-            .collect::<Vec<String>>();
+        let file_names = self.files.read().keys().cloned().collect::<Vec<String>>();
         file_names.iter().for_each(|file| {
             self.delete_file(file).unwrap();
         });
@@ -479,7 +483,7 @@ impl Dir {
             .sub_dirs
             .read()
             .keys()
-            .map(|name| name.clone())
+            .cloned()
             .collect::<Vec<String>>();
         dir_names.iter().for_each(|dir| {
             self.delete_dir(dir).unwrap();
@@ -500,7 +504,7 @@ impl Dir {
 impl DirectoryLike for Dir {
     type Error = OperationError;
     fn create_dir(&self, name: &str) -> Result<(), OperationError> {
-        let short_name = self.name_to_short_name(name);
+        let short_name = self.name_to_short_name(name, DirEntryType::Dir);
         // 创建文件夹时，防止其它线程读取
         let mut sub_dirs = self.sub_dirs.write();
         // 检查是否已经存在同名的文件夹
@@ -518,7 +522,7 @@ impl DirectoryLike for Dir {
         info!("create dir {name} at {cluster} cluster");
         let address = self.add_dir_or_file(name, &short_name, cluster, DirEntryType::Dir)?;
         // 创建目录
-        let dir = Dir::empty(cluster, address, self.meta.clone(), self.fat.clone());
+        let dir = Dir::empty(cluster, address, self.meta, self.fat.clone());
         // 创建目录的.和..目录项
         dir.add_dir_or_file(".", ".", cluster, DirEntryType::Dot)?;
         dir.add_dir_or_file("..", "..", self.start_cluster, DirEntryType::DotDot)?;
@@ -529,7 +533,7 @@ impl DirectoryLike for Dir {
     }
 
     fn create_file(&self, name: &str) -> Result<(), OperationError> {
-        let short_name = self.name_to_short_name(name);
+        let short_name = self.name_to_short_name(name, DirEntryType::File);
         let mut sub_files = self.files.write();
         // 检查是否已经存在同名的文件
         if sub_files.contains_key(name) {
@@ -544,7 +548,7 @@ impl DirectoryLike for Dir {
             .write()
             .set_entry(cluster, FatEntry::Eof, DirEntryType::Dir); //写入fat表
         let address = self.add_dir_or_file(name, &short_name, cluster, DirEntryType::File)?; //写入目录项
-        let file = File::new(cluster, address, self.meta.clone(), self.fat.clone());
+        let file = File::new(cluster, address, self.meta, self.fat.clone());
         sub_files.insert(name.to_string(), file); //添加到文件列表
         Ok(())
     }
@@ -618,6 +622,7 @@ impl DirectoryLike for Dir {
             })
     }
 
+    /// 返回当前目录下的文件与子目录
     fn list(&self) -> Result<Vec<String>, OperationError> {
         let mut ans = Vec::new();
         self.sub_dirs.read().iter().for_each(|(name, _)| {
@@ -627,6 +632,44 @@ impl DirectoryLike for Dir {
             ans.push(name.clone());
         });
         Ok(ans)
+    }
+    /// 重命名某个文件
+    fn rename_file(&self, old_name: &str, new_name: &str) -> Result<(), Self::Error> {
+        let file = self
+            .files
+            .write()
+            .remove(old_name)
+            .ok_or(OperationError::FileNotFound)?;
+        let short_name = self.name_to_short_name(new_name, DirEntryType::File);
+        let mut files = self.files.write();
+        // 删除原来的目录项
+        let cluster_chain = self.fat.read().get_cluster_chain(self.start_cluster); //获取目录的簇链
+        self.delete_entry(file.start_cluster, file.address, &cluster_chain)?; //删除目录项
+                                                                              // 生成新的目录项
+        self.add_dir_or_file(
+            new_name,
+            &short_name,
+            file.start_cluster,
+            DirEntryType::File,
+        )?;
+        files.insert(new_name.to_string(), file);
+        Ok(())
+    }
+    /// 重命名某个目录
+    fn rename_dir(&self, old_name: &str, new_name: &str) -> Result<(), Self::Error> {
+        let dir = self
+            .sub_dirs
+            .write()
+            .remove(old_name)
+            .ok_or(OperationError::DirNotFound)?;
+        let short_name = self.name_to_short_name(new_name, DirEntryType::Dir);
+        // 删除原来的目录项
+        let cluster_chain = self.fat.read().get_cluster_chain(self.start_cluster); //获取目录的簇链
+        self.delete_entry(dir.start_cluster, dir.address, &cluster_chain)?; //删除目录项
+                                                                            // 生成新的目录项
+        self.add_dir_or_file(new_name, &short_name, dir.start_cluster, DirEntryType::Dir)?;
+        self.sub_dirs.write().insert(new_name.to_string(), dir);
+        Ok(())
     }
 }
 
@@ -654,7 +697,7 @@ impl File {
         &self,
         offset: u32,
         size: u32,
-        cluster_chain: &Vec<u32>,
+        cluster_chain: &[u32],
     ) -> Vec<usize> {
         // 计算簇内偏移量
         let cluster_offset = offset % self.meta.bytes_per_cluster();
@@ -670,8 +713,8 @@ impl File {
                 self.meta.cluster_to_sector(*cluster) + self.meta.sectors_per_cluster as usize;
             for sector in start_sector..end_sector {
                 ans.push(sector);
-                size -= self.meta.bytes_per_sector as u32;
-                if size <= 0 {
+                size = size.saturating_sub(self.meta.bytes_per_sector as u32);
+                if size == 0 {
                     return ans;
                 }
             }
@@ -801,10 +844,10 @@ impl FileLike for File {
                 size -= (end - start) as u32;
                 offset += (end - start) as u32;
                 data_start += end - start;
-                if size == 0 {
-                    return;
-                } // write over
             });
+            if size == 0 {
+                break;
+            }
         }
         // 更新文件大小 todo!()
         self.update_size(new_size);
@@ -847,6 +890,8 @@ pub trait DirectoryLike {
     fn cd(&self, name: &str) -> Result<Arc<Dir>, Self::Error>;
     fn open(&self, name: &str) -> Result<Arc<File>, Self::Error>;
     fn list(&self) -> Result<Vec<String>, Self::Error>;
+    fn rename_file(&self, old_name: &str, new_name: &str) -> Result<(), Self::Error>;
+    fn rename_dir(&self, old_name: &str, new_name: &str) -> Result<(), Self::Error>;
 }
 
 pub trait FileLike {
@@ -856,20 +901,14 @@ pub trait FileLike {
     fn clear(&self);
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum OperationError {
-    #[error("No enough space")]
     NoEnoughSpace,
-    #[error("File not found")]
     FileNotFound,
-    #[error("Fire Exist")]
     FileExist,
-    #[error("Dir Exist")]
     DirExist,
-    #[error("Dir not found")]
     DirNotFound,
-    #[error("Offset out of size")]
     OffsetOutOfSize,
-    #[error("InvalidDirName")]
     InvalidDirName,
+    NotFound,
 }

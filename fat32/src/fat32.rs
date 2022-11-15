@@ -1,8 +1,9 @@
 use crate::cache::{sync, CacheManager, CACHE_MANAGER};
 use crate::device::{BlockDevice, DEVICE};
 use crate::dir::Dir;
+use crate::layout::{Fat, FsInfo, MetaData};
 use crate::utils::{u16_from_le_bytes, u32_from_le_bytes, BLOCK_SIZE};
-use crate::{block_buffer, Fat, FsInfo, MetaData};
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::fmt::Debug;
 use log::error;
@@ -14,12 +15,13 @@ pub struct Fat32 {
 }
 
 impl Fat32 {
-    pub fn new<T: BlockDevice>(device: T) -> Result<Fat32, ()> {
+    pub fn new<T: BlockDevice<Error = ()>>(device: T) -> Result<Fat32, ()>
+    where
+        <T as BlockDevice>::Error: Debug,
+    {
         // 需要读取第一扇区构建原始信息
-        let mut buffer = block_buffer!();
+        let mut buffer = [0; BLOCK_SIZE];
         let _dbr = device.read(0, &mut buffer).unwrap();
-        // todo!忽略了正确性检查
-        // self.check();
         let meta_data = MetaData {
             bytes_per_sector: u16_from_le_bytes(&buffer[0xb..0xb + 2]),
             sectors_per_cluster: buffer[0xd],

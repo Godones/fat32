@@ -3,7 +3,9 @@ use crate::dir::DirEntryType;
 use crate::utils::u32_from_le_bytes;
 use crate::utils::BLOCK_SIZE;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::fmt::Debug;
+use log::info;
 
 pub type EntryBytes = [u8; 32];
 pub type SectorData = [u8; BLOCK_SIZE];
@@ -22,7 +24,7 @@ pub struct MetaData {
 }
 
 /// 从BiosParameterBlock需要提供的功能
-pub trait BPB {
+pub trait Bpb {
     /// 拿到fat1/fat2的起始扇区
     fn fat_start_sector(&self) -> usize;
     /// 拿到根目录的起始扇区
@@ -34,7 +36,7 @@ pub trait BPB {
     fn bytes_per_cluster(&self) -> u32;
 }
 
-impl BPB for MetaData {
+impl Bpb for MetaData {
     #[inline]
     fn fat_start_sector(&self) -> usize {
         self.reserved_sectors as usize
@@ -139,7 +141,7 @@ impl Fat {
                 }
                 _ => {
                     cluster += 1;
-                    if cluster >= self.meta_data.total_sectors_32 as u32 {
+                    if cluster >= self.meta_data.total_sectors_32 {
                         cluster = 2;
                     }
                     entry = self.get_entry(cluster);
@@ -172,7 +174,7 @@ impl Fat {
 
     pub fn print_usage(&self) {
         let start = self.meta_data.fat_start_sector();
-        let end = start + self.meta_data.sectors_per_fat_32() as usize;
+        let end = start + self.meta_data.sectors_per_fat_32();
         'outer: for i in start..end {
             let sector_cache = get_block_cache_by_id(i);
             let mut flag = false;
@@ -182,7 +184,7 @@ impl Fat {
                         flag = true;
                         break;
                     }
-                    println!("{:#x?}", *val);
+                    info!("{:#x?}", *val);
                 }
             });
             if flag {
@@ -240,14 +242,9 @@ pub struct Content {
 }
 
 impl Content {
-    pub fn new() -> Self {
-        Self {
-            data: [0; BLOCK_SIZE],
-        }
-    }
     pub fn iter<T>(&self) -> impl Iterator<Item = &T> {
         self.data
-            .chunks_exact(std::mem::size_of::<T>())
+            .chunks_exact(core::mem::size_of::<T>())
             .map(|x| unsafe { &*(x.as_ptr() as *const T) })
     }
     pub fn read(&self) -> &[u8] {

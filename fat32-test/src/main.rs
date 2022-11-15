@@ -4,7 +4,6 @@ mod logging;
 mod other_fat32;
 
 use crate::device::FakeDevice;
-use mfat32::DirEntryType::Dir;
 use mfat32::Fat32;
 use mfat32::{DirectoryLike, FileLike};
 
@@ -62,6 +61,15 @@ fn main() {
     root.delete_dir("dir").unwrap();
     let a = root.create_file("test.txt");
     println!("create test.txt {:?}", a);
+
+    let a = root.rename_file("test.txt", "newtest.txt");
+    println!("rename test.txt to newtest.txt {:?}", a);
+
+    let a = root.create_dir("test_dir");
+    println!("create test_dir {:?}", a);
+    let a = root.rename_dir("test_dir", "new_test_dir");
+    println!("rename test_dir to new_test_dir {:?}", a);
+
     fat32.sync();
     // other_fat32::test_first_fat32();
     // other_fat32::test_second_fat32().unwrap();

@@ -1,4 +1,6 @@
 use crate::utils::{u16_from_le_bytes, u32_from_le_bytes};
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use bitflags::bitflags;
 use core::cmp::min;
 bitflags! {
@@ -77,7 +79,7 @@ impl FullLoongEntry {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
-    pub fn iter(&self) -> std::slice::Iter<LongEntry> {
+    pub fn iter(&self) -> core::slice::Iter<LongEntry> {
         self.entries.iter()
     }
 }
@@ -139,8 +141,7 @@ impl ShortEntry {
         buffer[24] = 106;
         buffer[25] = 85;
 
-        let short_entry = ShortEntry::from_buffer(&buffer);
-        short_entry
+        ShortEntry::from_buffer(&buffer)
     }
     /// 从字节数组中解析出短目录项
     pub fn from_buffer(buffer: &[u8]) -> Self {
@@ -241,12 +242,8 @@ impl LongEntry {
         let mut name2 = [0u16; 6];
         let mut name3 = [0u16; 2];
         let mut utf16 = name.encode_utf16().collect::<Vec<u16>>();
-        if utf16.len() < 13 {
-            let len = utf16.len();
-            for _ in 0..13 - len {
-                utf16.push(0xFFFF);
-            }
-        }
+        utf16.resize(13, 0xFFFF);
+
         name1.copy_from_slice(&utf16[0..5]);
         name2.copy_from_slice(&utf16[5..11]);
         name3.copy_from_slice(&utf16[11..13]);
@@ -306,16 +303,14 @@ impl LongEntry {
             self.name3.as_slice(),
         ]
         .iter()
-        .map(|&c| c.iter().map(|c| *c).collect::<Vec<u16>>())
-        .flatten()
+        .flat_map(|&c| c.iter().copied())
         .collect::<Vec<u16>>();
         let (index, _) = s_name
             .iter()
             .enumerate()
             .rfind(|(_i, &c)| c == 0)
             .unwrap_or((13, &0));
-        let name = String::from_utf16(&s_name[0..index]).unwrap();
-        name
+        String::from_utf16(&s_name[0..index]).unwrap()
     }
 
     pub fn to_buffer(&self) -> [u8; 32] {

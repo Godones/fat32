@@ -6,9 +6,3 @@ pub fn u32_from_le_bytes(bytes: &[u8]) -> u32 {
 }
 
 pub const BLOCK_SIZE: usize = 512;
-#[macro_export]
-macro_rules! block_buffer {
-    () => {
-        [0u8; BLOCK_SIZE]
-    };
-}
