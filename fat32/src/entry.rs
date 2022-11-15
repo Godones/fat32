@@ -1,11 +1,6 @@
-use crate::dir::Dir;
 use crate::utils::{u16_from_le_bytes, u32_from_le_bytes};
-use bit_field::BitField;
 use bitflags::bitflags;
-use log::{info, warn};
-use std::cmp::min;
-use std::f32::consts::E;
-use std::time;
+use core::cmp::min;
 bitflags! {
     pub struct EntryFlags:u8{
         const READ_ONLY = 0b0000_0001;
@@ -102,7 +97,7 @@ pub struct LongEntry {
 
 impl ShortEntry {
     pub fn new(name: &str, attr: EntryFlags, cluster: u32) -> Self {
-        /// 长文件名需要截断并全部转换为大写
+        // 长文件名需要截断并全部转换为大写
         let (name, ext) = if name == "." || name == ".." {
             (name.to_string(), String::new())
         } else {

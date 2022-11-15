@@ -1,12 +1,9 @@
-use crate::cache::{get_block_cache_by_id, BlockCache};
+use crate::cache::{get_block_cache_by_id};
 use crate::dir::DirEntryType;
 use crate::utils::u32_from_le_bytes;
-use crate::utils::{BLOCK_SIZE, ENTRY_PER_SECTOR};
-use crate::BlockDevice;
-use core::fmt::{Debug, Formatter, Pointer};
-use core::marker::PhantomData;
-use spin::Once;
-use std::sync::Arc;
+use crate::utils::{BLOCK_SIZE};
+use core::fmt::{Debug};
+use alloc::sync::Arc;
 
 pub type EntryBytes = [u8; 32];
 pub type SectorData = [u8; BLOCK_SIZE];

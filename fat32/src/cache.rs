@@ -2,7 +2,7 @@ use crate::device::DEVICE;
 use crate::utils::BLOCK_SIZE;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use log::{error, info};
+use log::{info};
 use spin::{Once, RwLock};
 
 /// 需要使用读写锁保护数据，防止多个线程同时访问

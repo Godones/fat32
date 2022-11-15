@@ -1,14 +1,11 @@
-use crate::cache::{get_block_cache_by_id, sync, CacheManager, CACHE_MANAGER};
+use crate::cache::{sync, CacheManager, CACHE_MANAGER};
 use crate::device::{BlockDevice, DEVICE};
-use crate::dir::{Dir, DirEntryType, File};
-use crate::entry::{EntryFlags, LongEntry, ShortEntry};
+use crate::dir::Dir;
 use crate::utils::{u16_from_le_bytes, u32_from_le_bytes, BLOCK_SIZE};
-use crate::{block_buffer, Content, EntryBytes, Fat, FatEntry, FsInfo, MetaData, BPB};
-use alloc::rc::Weak;
+use crate::{block_buffer, Fat, FsInfo, MetaData};
 use alloc::sync::Arc;
-use bitflags::bitflags;
-use core::fmt::{Debug, Formatter};
-use log::{error, info};
+use core::fmt::{Debug};
+use log::{error};
 use spin::{Mutex, RwLock};
 
 #[derive(Debug)]
@@ -18,10 +15,10 @@ pub struct Fat32 {
 
 impl Fat32 {
     pub fn new<T: BlockDevice>(device: T) -> Result<Fat32, ()> {
-        /// 需要读取第一扇区构建原始信息
+        // 需要读取第一扇区构建原始信息
         let mut buffer = block_buffer!();
         let dbr = device.read(0, &mut buffer).unwrap();
-        /// todo!忽略了正确性检查
+        // todo!忽略了正确性检查
         // self.check();
         let meta_data = MetaData {
             bytes_per_sector: u16_from_le_bytes(&buffer[0xb..0xb + 2]),

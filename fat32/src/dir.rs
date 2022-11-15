@@ -2,17 +2,16 @@
 //!
 //! 文件的打开/创建/删除等操作都通过这树个形结构来完成,创建文件系统后处于根目录下
 //!
-use crate::cache::{get_block_cache_by_id, BlockCache};
+use crate::cache::{get_block_cache_by_id};
 use crate::entry::{EntryFlags, FullLoongEntry, LongEntry, ShortEntry};
 use crate::utils::u32_from_le_bytes;
 use crate::{Content, EntryBytes, Fat, FatEntry, MetaData, SectorData, BPB};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::cmp::{max, min};
-use log::{info, trace, warn};
-use spin::{Mutex, RwLock, RwLockWriteGuard};
-use std::io::Write;
-use std::ops::Range;
+use log::{info, trace};
+use spin::{ RwLock};
+use core::ops::Range;
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
@@ -201,7 +200,6 @@ impl Dir {
         let attr = match dtype {
             DirEntryType::Dir | DirEntryType::Dot | DirEntryType::DotDot => EntryFlags::DIRECTORY,
             DirEntryType::File => EntryFlags::ARCHIVE,
-            _ => EntryFlags::empty(),
         };
 
         let short_entry = ShortEntry::new(short_name, attr, start_cluster);
@@ -212,7 +210,6 @@ impl Dir {
             DirEntryType::Dir | DirEntryType::File => {
                 FullLoongEntry::from_file_name(&name, short_entry.checksum())
             }
-            _ => FullLoongEntry::new(),
         };
         info!("full_long_entry:{:#?}", full_long_entry);
         info!("short_entry:{:#?}", short_entry);
@@ -805,7 +802,7 @@ impl FileLike for File {
                 content[start..end].copy_from_slice(&data[data_start..data_start + (end - start)]);
                 size -= (end - start) as u32;
                 offset += (end - start) as u32;
-                data_start += (end - start);
+                data_start += end - start;
                 if size == 0 {
                     return;
                 } // write over
