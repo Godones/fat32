@@ -11,5 +11,10 @@
 - [x] 读取文件内容/清空文件内容
 - [x] 写入文件内容
 - [x] ls/cd
-- [ ] link/unlink
-- [ ] test
+- [x] 重命名
+- [ ] tests
+
+## 使用
+
+`examples`目录下有简单的使用案例。`fat32-test`目录下有创建`fat32`文件的`Makefile`脚本。使用前请运行脚本。如果想查看示例的效果，需要重新挂载文件系统，使用命令`make umount && make mount`后进入`/fat`查看是否正确创建文件。
+

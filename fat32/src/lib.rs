@@ -13,4 +13,4 @@ extern crate alloc;
 
 pub use device::BlockDevice;
 pub use dir::{Dir, DirectoryLike, File, FileLike, OperationError};
-pub use fat32::Fat32;
+pub use crate::fat32::Fat32;
