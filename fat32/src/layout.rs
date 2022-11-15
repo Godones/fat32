@@ -1,9 +1,9 @@
-use crate::cache::{get_block_cache_by_id};
+use crate::cache::get_block_cache_by_id;
 use crate::dir::DirEntryType;
 use crate::utils::u32_from_le_bytes;
-use crate::utils::{BLOCK_SIZE};
-use core::fmt::{Debug};
+use crate::utils::BLOCK_SIZE;
 use alloc::sync::Arc;
+use core::fmt::Debug;
 
 pub type EntryBytes = [u8; 32];
 pub type SectorData = [u8; BLOCK_SIZE];
@@ -106,7 +106,7 @@ impl Fat {
     pub fn set_entry(&self, cluster: u32, entry: FatEntry, dirtype: DirEntryType) {
         let fat_sector = self.meta_data.fat_start_sector() + (cluster as usize * 4) / BLOCK_SIZE;
         let fat_offset = (cluster as usize * 4) % BLOCK_SIZE;
-        let mut sector_cache = get_block_cache_by_id(fat_sector);
+        let sector_cache = get_block_cache_by_id(fat_sector);
         let entry = match entry {
             FatEntry::Free => [0, 0, 0, 0],
             FatEntry::Bad => [0xF7, 0xFF, 0xFF, 0xFF],
@@ -259,6 +259,7 @@ impl Content {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 struct BiosParameterBlock {
     /// 每扇区字节数
     /// 512/1024/2048/4096
@@ -330,6 +331,7 @@ struct BiosParameterBlock {
     file_system_type: [u8; 8],
 }
 
+#[allow(unused)]
 struct Dbr {
     /// jump code
     jump: [u8; 3],

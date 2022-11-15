@@ -61,7 +61,7 @@ impl FullLoongEntry {
         let mut index = 1;
         while filename.len() > 13 {
             let name = filename.split_off(13);
-            let mut entry = LongEntry::new(&filename, index, check_sum);
+            let entry = LongEntry::new(&filename, index, check_sum);
             entries.push(entry);
             filename = name;
             index += 1;
@@ -70,7 +70,7 @@ impl FullLoongEntry {
         // 其order为0x40|index
         // 需要在字符串后面添加0x00
         filename.push(0x00 as char);
-        let mut entry = LongEntry::new(&filename, 0x40 | index, check_sum);
+        let entry = LongEntry::new(&filename, 0x40 | index, check_sum);
         entries.push(entry);
         Self { entries }
     }
@@ -222,12 +222,14 @@ impl ShortEntry {
         sum
     }
 
+    #[allow(unused)]
     pub fn attr(&self) -> &EntryFlags {
         &self.attr
     }
     pub fn start_cluster(&self) -> u32 {
         u32::from(self.cluster_high) << 16 | u32::from(self.cluster_low)
     }
+    #[allow(unused)]
     pub fn file_size(&self) -> u32 {
         self.file_size
     }
@@ -298,7 +300,7 @@ impl LongEntry {
         }
     }
     pub fn filename(&self) -> String {
-        let mut s_name = [
+        let s_name = [
             self.name1.as_slice(),
             self.name2.as_slice(),
             self.name3.as_slice(),
@@ -310,7 +312,7 @@ impl LongEntry {
         let (index, _) = s_name
             .iter()
             .enumerate()
-            .rfind(|(i, &c)| c == 0)
+            .rfind(|(_i, &c)| c == 0)
             .unwrap_or((13, &0));
         let name = String::from_utf16(&s_name[0..index]).unwrap();
         name

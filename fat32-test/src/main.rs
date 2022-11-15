@@ -1,12 +1,12 @@
 #![allow(unused)]
+mod device;
 mod logging;
 mod other_fat32;
-mod device;
 
-use mfat32::{Fat32};
-use mfat32::{DirectoryLike, FileLike};
-use mfat32::DirEntryType::Dir;
 use crate::device::FakeDevice;
+use mfat32::DirEntryType::Dir;
+use mfat32::Fat32;
+use mfat32::{DirectoryLike, FileLike};
 
 fn main() {
     logging::init_logger();
@@ -66,5 +66,3 @@ fn main() {
     // other_fat32::test_first_fat32();
     // other_fat32::test_second_fat32().unwrap();
 }
-
-

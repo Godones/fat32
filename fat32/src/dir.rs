@@ -2,16 +2,16 @@
 //!
 //! 文件的打开/创建/删除等操作都通过这树个形结构来完成,创建文件系统后处于根目录下
 //!
-use crate::cache::{get_block_cache_by_id};
+use crate::cache::get_block_cache_by_id;
 use crate::entry::{EntryFlags, FullLoongEntry, LongEntry, ShortEntry};
 use crate::utils::u32_from_le_bytes;
 use crate::{Content, EntryBytes, Fat, FatEntry, MetaData, SectorData, BPB};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::cmp::{max, min};
-use log::{info, trace};
-use spin::{ RwLock};
 use core::ops::Range;
+use log::{info, trace};
+use spin::RwLock;
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
@@ -80,7 +80,7 @@ impl Dir {
             if sectors.is_empty() {
                 break;
             }
-            let mut range = sectors.remove(0);
+            let range = sectors.remove(0);
             let mut flag = false;
             for i in range {
                 let cache = get_block_cache_by_id(i);
@@ -150,7 +150,7 @@ impl Dir {
         if name == "." || name == ".." {
             return name.to_string();
         }
-        let mut short_name = String::new();
+        let mut short_name;
         let mut name = name.to_string();
         let mut ext = String::new();
         if name.contains(".") {
@@ -261,7 +261,7 @@ impl Dir {
     fn find_enough_entry(&self, need: usize) -> Result<Vec<(usize, usize)>, OperationError> {
         info!("find_enough_entry need:{}", need);
         let mut fat = self.fat.write();
-        let mut cluster = self.start_cluster;
+        let cluster = self.start_cluster;
         let mut cluster_chain = fat.get_cluster_chain(cluster); // 获取簇链
 
         let mut collect = Vec::new();
@@ -383,7 +383,7 @@ impl Dir {
         address: (usize, usize),
         cluster_chain: &Vec<u32>,
     ) -> Result<(), OperationError> {
-        let ans = cluster_chain.iter().enumerate().find(|(i, &cluster)| {
+        let ans = cluster_chain.iter().enumerate().find(|(_i, &cluster)| {
             let s_sector = self.meta.cluster_to_sector(cluster);
             let e_sector = s_sector + self.meta.sectors_per_cluster as usize;
             (s_sector..e_sector).contains(&address.0)
@@ -392,12 +392,8 @@ impl Dir {
         let (index, _) = ans.unwrap();
         // 处理目录项跨扇区或者跨簇的情况
         let cache = get_block_cache_by_id(address.0);
-        trace!(
-            "delete short entry at {}, offset {}",
-            address.0,
-            address.1
-        );
-        let mut short_entry = cache.write(address.1, |entry: &mut EntryBytes| {
+        trace!("delete short entry at {}, offset {}", address.0, address.1);
+        let short_entry = cache.write(address.1, |entry: &mut EntryBytes| {
             let short_entry = ShortEntry::from_buffer(entry);
             entry[0] = 0xE5;
             short_entry
@@ -425,11 +421,11 @@ impl Dir {
         loop {
             let (sector, offset) = if entry_offset == 0 {
                 // 如果是扇区的第一个目录项，则需要查找前一个扇区的最后一个目录项
-                if pre_sector==entry_sector{
-                    assert_eq!(pre_sector,self.meta.root_dir_start_sector());
+                if pre_sector == entry_sector {
+                    assert_eq!(pre_sector, self.meta.root_dir_start_sector());
                     trace!("stop find long entry");
                     break;
-                }//
+                } //
                 assert_ne!(pre_sector, entry_sector);
                 let t = (pre_sector, self.meta.bytes_per_sector as usize - 32);
                 entry_sector = pre_sector;
@@ -489,13 +485,13 @@ impl Dir {
             self.delete_dir(dir).unwrap();
         });
         // 回收簇
-        let mut fat = self.fat.write();
+        let fat = self.fat.write();
         let cluster_chain = fat.get_cluster_chain(self.start_cluster);
         trace!("clear dir, cluster_chain: {:?}", cluster_chain);
         for &i in cluster_chain.iter().skip(1) {
             fat.set_entry(i, FatEntry::Free, DirEntryType::File);
         } // 跳过了第一个簇
-        // 将第一个簇指向结束标志
+          // 将第一个簇指向结束标志
         fat.set_entry(self.start_cluster, FatEntry::Eof, DirEntryType::File);
         Ok(())
     }
@@ -524,8 +520,8 @@ impl DirectoryLike for Dir {
         // 创建目录
         let dir = Dir::empty(cluster, address, self.meta.clone(), self.fat.clone());
         // 创建目录的.和..目录项
-        dir.add_dir_or_file(".", ".", cluster, DirEntryType::Dot);
-        dir.add_dir_or_file("..", "..", self.start_cluster, DirEntryType::DotDot);
+        dir.add_dir_or_file(".", ".", cluster, DirEntryType::Dot)?;
+        dir.add_dir_or_file("..", "..", self.start_cluster, DirEntryType::DotDot)?;
         dir.sub_dirs.write().insert(".".to_string(), dir.clone());
         dir.sub_dirs.write().insert("..".to_string(), self.clone());
         sub_dirs.insert(name.to_string(), dir);
@@ -558,7 +554,7 @@ impl DirectoryLike for Dir {
     fn delete_dir(&self, name: &str) -> Result<(), OperationError> {
         trace!("delete dir: {}", name);
         if name == "." || name == ".." {
-            return Ok(())
+            return Ok(());
         }
         let mut sub_dirs = self.sub_dirs.write();
         let dir = sub_dirs.remove(name).ok_or(OperationError::DirNotFound)?;
@@ -566,11 +562,13 @@ impl DirectoryLike for Dir {
         // 递归删除子文件夹
         let start_cluster = dir.start_cluster;
         // 删除分配的簇
-        self.fat.write().set_entry(start_cluster, FatEntry::Free, DirEntryType::Dir);
+        self.fat
+            .write()
+            .set_entry(start_cluster, FatEntry::Free, DirEntryType::Dir);
         // 删除目录项
         info!("begin to delete dir entry...");
         let cluster_chain = self.fat.read().get_cluster_chain(self.start_cluster);
-        self.delete_entry(dir.start_cluster,dir.address,&cluster_chain)?;
+        self.delete_entry(dir.start_cluster, dir.address, &cluster_chain)?;
         info!("delete dir entry success");
         Ok(())
     }
@@ -593,7 +591,7 @@ impl DirectoryLike for Dir {
         // 删除目录项
         // File 包含了文件的短目录项位置,需要找到长目录项的位置
         let cluster_chain = fat.get_cluster_chain(self.start_cluster); //获取目录的簇链
-        self.delete_entry(file.start_cluster,file.address,&cluster_chain); //删除目录项
+        self.delete_entry(file.start_cluster, file.address, &cluster_chain)?; //删除目录项
         Ok(())
     }
 
@@ -661,7 +659,7 @@ impl File {
         // 计算簇内偏移量
         let cluster_offset = offset % self.meta.bytes_per_cluster();
         // 计算开始簇号
-        let mut start_cluster_index = offset / self.meta.bytes_per_cluster();
+        let start_cluster_index = offset / self.meta.bytes_per_cluster();
         // 计算簇内的开始扇区号
         let mut start_sector_index = cluster_offset / self.meta.bytes_per_sector as u32;
         let mut ans = Vec::new();
@@ -713,7 +711,7 @@ impl File {
         let cache = get_block_cache_by_id(self.address.0);
         cache.write(0, |content: &mut Content| {
             let content = content.write();
-            let mut size = size.to_le_bytes();
+            let size = size.to_le_bytes();
             content[self.address.1 + 28..self.address.1 + 32].copy_from_slice(&size);
         });
     }
@@ -722,7 +720,7 @@ impl File {
 impl FileLike for File {
     type Error = OperationError;
 
-    fn read(&self, offset: u32, size: u32) -> Result<Vec<u8>, Self::Error> {
+    fn read(&self, offset: u32, _size: u32) -> Result<Vec<u8>, Self::Error> {
         // 偏移量大于文件大小则直接返回空
         let size = self.size();
         if offset >= size {
@@ -817,7 +815,7 @@ impl FileLike for File {
     /// 释放所有簇
     fn clear(&self) {
         trace!("clear file");
-        let mut fat = self.fat.write();
+        let fat = self.fat.write();
         let cluster_chain = fat.get_cluster_chain(self.start_cluster);
         trace!("clear file, cluster_chain: {:?}", cluster_chain);
         for &i in cluster_chain.iter().skip(1) {

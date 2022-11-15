@@ -2,7 +2,7 @@ use crate::device::DEVICE;
 use crate::utils::BLOCK_SIZE;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use log::{info};
+use log::info;
 use spin::{Once, RwLock};
 
 /// 需要使用读写锁保护数据，防止多个线程同时访问
@@ -109,11 +109,11 @@ impl Cache for CacheManager {
                         .cache
                         .iter()
                         .enumerate()
-                        .find(|(index, cache)| Arc::strong_count(cache) == 1);
+                        .find(|(_index, cache)| Arc::strong_count(cache) == 1);
                     if change.is_none() {
                         panic!("no cache can be replaced");
                     }
-                    let (index, cache) = change.unwrap();
+                    let (index, _cache) = change.unwrap();
                     self.cache.remove(index);
                 }
                 let mut buffer = [0u8; BLOCK_SIZE];

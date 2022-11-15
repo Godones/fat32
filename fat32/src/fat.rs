@@ -4,8 +4,8 @@ use crate::dir::Dir;
 use crate::utils::{u16_from_le_bytes, u32_from_le_bytes, BLOCK_SIZE};
 use crate::{block_buffer, Fat, FsInfo, MetaData};
 use alloc::sync::Arc;
-use core::fmt::{Debug};
-use log::{error};
+use core::fmt::Debug;
+use log::error;
 use spin::{Mutex, RwLock};
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ impl Fat32 {
     pub fn new<T: BlockDevice>(device: T) -> Result<Fat32, ()> {
         // 需要读取第一扇区构建原始信息
         let mut buffer = block_buffer!();
-        let dbr = device.read(0, &mut buffer).unwrap();
+        let _dbr = device.read(0, &mut buffer).unwrap();
         // todo!忽略了正确性检查
         // self.check();
         let meta_data = MetaData {

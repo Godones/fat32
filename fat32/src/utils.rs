@@ -6,8 +6,6 @@ pub fn u32_from_le_bytes(bytes: &[u8]) -> u32 {
 }
 
 pub const BLOCK_SIZE: usize = 512;
-pub const ENTRY_PER_SECTOR: usize = BLOCK_SIZE / 4;
-
 #[macro_export]
 macro_rules! block_buffer {
     () => {

@@ -1,10 +1,10 @@
+use fat32::fat::FAT;
+use fatfs::{IoBase, SeekFrom};
+use mfat32::BlockDevice;
+use spin::Once;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, Write};
 use std::sync::{Arc, Mutex};
-use fat32::fat::FAT;
-use fatfs::{IoBase, SeekFrom};
-use spin::Once;
-use mfat32::BlockDevice;
 
 #[derive(Debug, Clone)]
 pub struct FakeDevice {
@@ -12,7 +12,7 @@ pub struct FakeDevice {
 }
 
 impl FakeDevice {
-    pub fn new(name:&str) -> Self {
+    pub fn new(name: &str) -> Self {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -46,13 +46,13 @@ impl BlockDevice for FakeDevice {
     }
 }
 
-#[derive(Debug,Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Device;
 
 static DEVICE: Once<Mutex<File>> = Once::new();
 
-impl Device{
-    pub fn new(name:&str)->Self{
+impl Device {
+    pub fn new(name: &str) -> Self {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -63,29 +63,38 @@ impl Device{
     }
 }
 
-impl block_device::BlockDevice for Device{
+impl block_device::BlockDevice for Device {
     type Error = ();
 
-    fn read(&self, buf: &mut [u8], address: usize, _number_of_blocks: usize) -> Result<(), Self::Error> {
+    fn read(
+        &self,
+        buf: &mut [u8],
+        address: usize,
+        _number_of_blocks: usize,
+    ) -> Result<(), Self::Error> {
         let mut file = DEVICE.get().unwrap().lock().unwrap();
-        file.seek(std::io::SeekFrom::Start(address as u64))
-            .unwrap();
+        file.seek(std::io::SeekFrom::Start(address as u64)).unwrap();
         file.read(buf).unwrap();
         Ok(())
     }
-    fn write(&self, buf: &[u8], address: usize, _number_of_blocks: usize) -> Result<(), Self::Error> {
+    fn write(
+        &self,
+        buf: &[u8],
+        address: usize,
+        _number_of_blocks: usize,
+    ) -> Result<(), Self::Error> {
         let mut file = DEVICE.get().unwrap().lock().unwrap();
-        file.seek(std::io::SeekFrom::Start(address as u64))
-            .unwrap();
+        file.seek(std::io::SeekFrom::Start(address as u64)).unwrap();
         file.write(buf).unwrap();
         Ok(())
     }
 }
 
+impl IoBase for FakeDevice {
+    type Error = ();
+}
 
-impl IoBase for FakeDevice { type Error = (); }
-
-impl fatfs::Read for FakeDevice{
+impl fatfs::Read for FakeDevice {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         let mut file = self.file.lock().unwrap();
         file.read(buf).unwrap();

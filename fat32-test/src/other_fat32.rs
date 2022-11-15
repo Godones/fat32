@@ -1,13 +1,13 @@
-use std::fs::OpenOptions;
-use fat32::*;
+use crate::device::{Device, FakeDevice};
 use fat32::fat::FAT;
 use fat32::file::WriteType;
 use fat32::volume::Volume;
+use fat32::*;
 use fatfs::Write;
 use fscommon::BufStream;
-use crate::device::{Device, FakeDevice};
+use std::fs::OpenOptions;
 
-pub fn test_first_fat32(){
+pub fn test_first_fat32() {
     let device = Device::new("fat32-test/test.img");
     let volume = Volume::new(device);
     let mut root = volume.root_dir();
@@ -39,7 +39,7 @@ use std::io::{self, prelude::*};
 use fatfs::{FileSystem, FsOptions};
 
 pub fn test_second_fat32() -> io::Result<()> {
-    let file =  OpenOptions::new()
+    let file = OpenOptions::new()
         .read(true)
         .write(true)
         .open("fat32-test/test.img")
@@ -49,8 +49,8 @@ pub fn test_second_fat32() -> io::Result<()> {
     let root_dir = fs.root_dir();
     root_dir.create_dir("test_test_test")?;
     root_dir.create_file("test.txt")?;
-    root_dir.iter().for_each(|name|{
-        if name.is_ok(){
+    root_dir.iter().for_each(|name| {
+        if name.is_ok() {
             let t = name.unwrap();
             let x = t.file_name();
             println!("{x}");
