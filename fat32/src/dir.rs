@@ -24,7 +24,7 @@ pub struct Dir {
     /// 目录项位置(sector, offset)
     address: (usize, usize),
     /// 元数据信息
-    meta: MetaData,
+    meta: Arc<MetaData>,
     /// fat表
     fat: Arc<RwLock<Fat>>,
     sub_dirs: Arc<RwLock<BTreeMap<String, Dir>>>,
@@ -36,7 +36,7 @@ pub struct File {
     /// 文件的起始簇号
     start_cluster: u32,
     /// 元数据
-    meta: MetaData,
+    meta: Arc<MetaData>,
     fat: Arc<RwLock<Fat>>,
     /// 记录文件目录项的位置(sector, offset)
     /// offset是短目录项的位置
@@ -49,7 +49,7 @@ impl Dir {
     pub fn new(
         start_cluster: u32,
         address: (usize, usize),
-        meta: MetaData,
+        meta: Arc<MetaData>,
         fat: Arc<RwLock<Fat>>,
     ) -> Self {
         let dir = Self::empty(start_cluster, address, meta, fat);
@@ -59,7 +59,7 @@ impl Dir {
     fn empty(
         start_cluster: u32,
         address: (usize, usize),
-        meta: MetaData,
+        meta: Arc<MetaData>,
         fat: Arc<RwLock<Fat>>,
     ) -> Self {
         Dir {
@@ -119,17 +119,17 @@ impl Dir {
                                     let dir = Dir::empty(
                                         start_cluster,
                                         (i, index * 32),
-                                        self.meta,
+                                        self.meta.clone(),
                                         self.fat.clone(),
                                     );
                                     sub_dir.insert(name, dir);
                                 } else {
                                     let start_cluster = short_entry.start_cluster();
-                                    info!("checksum: {}", short_entry.checksum());
+                                    info!("checksum: {}", short_entry.check_sum());
                                     let file = File::new(
                                         start_cluster,
                                         (i, index * 32),
-                                        self.meta,
+                                        self.meta.clone(),
                                         self.fat.clone(),
                                     );
                                     files.insert(name, file);
@@ -192,8 +192,8 @@ impl Dir {
         if !ext.is_empty() {
             short_name = format!("{short_name}.{ext}");
         }
-        if short_name.len() > 11 {
-            short_name = short_name.chars().take(11).collect::<String>();
+        if short_name.len() > 12 {
+            short_name = short_name.chars().take(12).collect::<String>();
         }
         short_name
     }
@@ -217,7 +217,7 @@ impl Dir {
         let full_long_entry = match dtype {
             DirEntryType::Dot | DirEntryType::DotDot => FullLoongEntry::new(),
             DirEntryType::Dir | DirEntryType::File => {
-                FullLoongEntry::from_file_name(name, short_entry.checksum())
+                FullLoongEntry::from_file_name(name, short_entry.check_sum())
             }
         };
         info!("full_long_entry:{:#?}", full_long_entry);
@@ -454,7 +454,7 @@ impl Dir {
                 if entry_attr.contains(EntryFlags::LONG_NAME) {
                     // 如果是长目录项，则将其标记为删除
                     let entry = LongEntry::from_buffer(entry_bytes);
-                    assert_eq!(entry.check_sum(), short_entry.checksum());
+                    assert_eq!(entry.check_sum(), short_entry.check_sum());
                     entry_bytes[0] = 0xE5;
                     trace!("delete long entry");
                 } else {
@@ -522,7 +522,7 @@ impl DirectoryLike for Dir {
         info!("create dir {name} at {cluster} cluster");
         let address = self.add_dir_or_file(name, &short_name, cluster, DirEntryType::Dir)?;
         // 创建目录
-        let dir = Dir::empty(cluster, address, self.meta, self.fat.clone());
+        let dir = Dir::empty(cluster, address, self.meta.clone(), self.fat.clone());
         // 创建目录的.和..目录项
         dir.add_dir_or_file(".", ".", cluster, DirEntryType::Dot)?;
         dir.add_dir_or_file("..", "..", self.start_cluster, DirEntryType::DotDot)?;
@@ -548,7 +548,7 @@ impl DirectoryLike for Dir {
             .write()
             .set_entry(cluster, FatEntry::Eof, DirEntryType::Dir); //写入fat表
         let address = self.add_dir_or_file(name, &short_name, cluster, DirEntryType::File)?; //写入目录项
-        let file = File::new(cluster, address, self.meta, self.fat.clone());
+        let file = File::new(cluster, address, self.meta.clone(), self.fat.clone());
         sub_files.insert(name.to_string(), file); //添加到文件列表
         Ok(())
     }
@@ -677,7 +677,7 @@ impl File {
     pub fn new(
         start_cluster: u32,
         address: (usize, usize),
-        meta: MetaData,
+        meta: Arc<MetaData>,
         fat: Arc<RwLock<Fat>>,
     ) -> Self {
         Self {
@@ -685,6 +685,14 @@ impl File {
             meta,
             fat,
             address,
+        }
+    }
+    fn empty()->Self{
+        Self{
+            start_cluster: 0,
+            meta: Arc::new(Default::default()),
+            fat: Arc::new(RwLock::new(Fat::empty())),
+            address: (0, 0)
         }
     }
     /// 获取文件占用的簇
@@ -911,4 +919,49 @@ pub enum OperationError {
     OffsetOutOfSize,
     InvalidDirName,
     NotFound,
+}
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+    fn make_dir()->Dir{
+        Dir{
+            start_cluster: 0,
+            address: (0, 0),
+            meta: Arc::new(MetaData::default()),
+            fat: Arc::new(RwLock::new(Fat::empty())),
+            sub_dirs: Arc::new(Default::default()),
+            files: Arc::new(Default::default())
+        }
+    }
+    #[test]
+    fn test_name_to_short_name(){
+        let dir = make_dir();
+        let name1 = "hello1234.txt";
+        let short_name = dir.name_to_short_name(name1,DirEntryType::File);
+        assert_eq!("hello1~1.txt",short_name);
+        dir.files.write().insert("hello1234.txt".to_string(),File::empty());
+        let short_name = dir.name_to_short_name(name1,DirEntryType::File);
+        assert_eq!("hello1~2.txt",short_name);
+        let short_name = dir.name_to_short_name(name1,DirEntryType::Dir);
+        assert_eq!("hello1~1.txt",short_name);
+        dir.sub_dirs.write().insert(name1.to_string(),dir.clone());
+        let short_name = dir.name_to_short_name(name1,DirEntryType::Dir);
+        assert_eq!("hello1~2.txt",short_name);
+    }
+    #[test]
+    fn test_make_entry(){
+        let dir = make_dir();
+        let name1 = "hello1234.txt";
+        let short_name = dir.name_to_short_name(name1,DirEntryType::File);
+        let (short_entry,full_long_entry) = dir.make_entry(name1,&short_name,0,DirEntryType::File).unwrap();
+        assert_eq!(short_entry.start_cluster(),0);
+        assert_eq!(short_entry.filename(),short_name.to_uppercase());
+        assert_eq!(short_entry.attr(),&EntryFlags::ARCHIVE);
+        assert_eq!(full_long_entry.filename(),name1);
+        assert_eq!(full_long_entry.len(),1);
+        full_long_entry.iter().for_each(|long_entry|{
+            assert_eq!(long_entry.check_sum(),short_entry.check_sum());
+        })
+    }
 }

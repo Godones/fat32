@@ -15,3 +15,4 @@ Cargo.lock
 
 fat32-test/test.img
 fat32-test/test.hex
+fat32/tests/*.img

@@ -51,7 +51,7 @@ impl Fat32 {
         let root_dir = Dir::new(
             meta_data.root_dir_cluster,
             (0, 0),
-            meta_data,
+            Arc::new(meta_data),
             Arc::new(RwLock::new(fat)),
         );
         Ok(Fat32 {

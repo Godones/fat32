@@ -212,7 +212,7 @@ impl ShortEntry {
     }
 
     /// 计算短文件名的校验和
-    pub fn checksum(&self) -> u8 {
+    pub fn check_sum(&self) -> u8 {
         let mut sum = 0u8;
         for &byte in self.name.iter() {
             sum = ((sum & 1) << 7) + (sum >> 1) + byte ;
@@ -400,5 +400,5 @@ fn test_short_entry_to_buffer() {
 #[test]
 fn test_short_entry_checksum() {
     let short_entry = ShortEntry::new("hello", EntryFlags::DIRECTORY, 0);
-    assert_eq!(short_entry.checksum(), 0x14);
+    assert_eq!(short_entry.check_sum(), 0x14);
 }

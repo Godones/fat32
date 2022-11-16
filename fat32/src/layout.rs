@@ -11,7 +11,7 @@ pub type EntryBytes = [u8; 32];
 pub type SectorData = [u8; BLOCK_SIZE];
 
 /// 只包含部分需要的BPB参数
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone,Default)]
 pub struct MetaData {
     pub bytes_per_sector: u16,
     pub sectors_per_cluster: u8,
@@ -91,6 +91,13 @@ impl Fat {
             meta_data,
             next_free_cluster: fs_info.next_free_cluster,
             total_free_cluster: fs_info.free_cluster_count,
+        }
+    }
+    pub fn empty()->Self{
+        Self{
+            meta_data: Arc::new(Default::default()),
+            next_free_cluster: 0,
+            total_free_cluster: 0
         }
     }
     pub fn get_entry(&self, cluster: u32) -> FatEntry {
