@@ -90,4 +90,3 @@ impl block_device::BlockDevice for Device {
         Ok(())
     }
 }
-

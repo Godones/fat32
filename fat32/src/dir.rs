@@ -271,7 +271,7 @@ impl Dir {
         let mut fat = self.fat.write();
         let cluster = self.start_cluster;
         let mut cluster_chain = fat.get_cluster_chain(cluster); // 获取簇链
-
+        trace!("cluster_chain:{:?}", cluster_chain);
         let mut collect = Vec::new();
         collect.reserve(need); // 预分配空间
         let mut find_flag = false;
@@ -287,12 +287,13 @@ impl Dir {
                     break;
                 }
             } // all sectors
-            if find_flag {
+            if collect.len() == need {
                 break;
             }
         } // all cluster
           // 检查是否找到足够的目录项
         if !find_flag {
+            trace!("not find enough entry, need allocate new cluster");
             // 没有找到足够的目录项，需要分配新的cluster
             let new_cluster = fat
                 .alloc_cluster()
@@ -305,9 +306,16 @@ impl Dir {
             // 但不需要重新开始分配
             cluster_chain.push(new_cluster);
             let new_sector = self.meta.cluster_to_sector(new_cluster);
-            self.find_enough_entry_inner(new_sector, cluster_chain.len(), 0, need, &mut collect);
+            self.find_enough_entry_inner(
+                new_sector,
+                cluster_chain.len() - 1,
+                0,
+                need,
+                &mut collect,
+            );
             assert_eq!(collect.len(), need);
         }
+        trace!("find entries success, len: {:?}", collect);
         // 找到足够的目录项，返回结果
         let ans = collect
             .iter()
@@ -687,12 +695,13 @@ impl File {
             address,
         }
     }
-    fn empty()->Self{
-        Self{
+    #[allow(unused)]
+    fn empty() -> Self {
+        Self {
             start_cluster: 0,
             meta: Arc::new(Default::default()),
             fat: Arc::new(RwLock::new(Fat::empty())),
-            address: (0, 0)
+            address: (0, 0),
         }
     }
     /// 获取文件占用的簇
@@ -771,14 +780,14 @@ impl File {
 impl FileLike for File {
     type Error = OperationError;
 
-    fn read(&self, offset: u32, _size: u32) -> Result<Vec<u8>, Self::Error> {
+    fn read(&self, offset: u32, size: u32) -> Result<Vec<u8>, Self::Error> {
         // 偏移量大于文件大小则直接返回空
-        let size = self.size();
-        if offset >= size {
+        let file_size = self.size();
+        if offset >= file_size {
             return Ok(Vec::new());
         }
         // 最多只能读取文件的大小
-        let mut size = min(size, size - offset);
+        let mut size = min(file_size, size);
         info!("read file at offset:{}, size:{}", offset, size);
         let mut data = Vec::new();
         // 提前分配空间
@@ -922,46 +931,50 @@ pub enum OperationError {
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
-    fn make_dir()->Dir{
-        Dir{
+    fn make_dir() -> Dir {
+        Dir {
             start_cluster: 0,
             address: (0, 0),
             meta: Arc::new(MetaData::default()),
             fat: Arc::new(RwLock::new(Fat::empty())),
             sub_dirs: Arc::new(Default::default()),
-            files: Arc::new(Default::default())
+            files: Arc::new(Default::default()),
         }
     }
     #[test]
-    fn test_name_to_short_name(){
+    fn test_name_to_short_name() {
         let dir = make_dir();
         let name1 = "hello1234.txt";
-        let short_name = dir.name_to_short_name(name1,DirEntryType::File);
-        assert_eq!("hello1~1.txt",short_name);
-        dir.files.write().insert("hello1234.txt".to_string(),File::empty());
-        let short_name = dir.name_to_short_name(name1,DirEntryType::File);
-        assert_eq!("hello1~2.txt",short_name);
-        let short_name = dir.name_to_short_name(name1,DirEntryType::Dir);
-        assert_eq!("hello1~1.txt",short_name);
-        dir.sub_dirs.write().insert(name1.to_string(),dir.clone());
-        let short_name = dir.name_to_short_name(name1,DirEntryType::Dir);
-        assert_eq!("hello1~2.txt",short_name);
+        let short_name = dir.name_to_short_name(name1, DirEntryType::File);
+        assert_eq!("hello1~1.txt", short_name);
+        dir.files
+            .write()
+            .insert("hello1234.txt".to_string(), File::empty());
+        let short_name = dir.name_to_short_name(name1, DirEntryType::File);
+        assert_eq!("hello1~2.txt", short_name);
+        let short_name = dir.name_to_short_name(name1, DirEntryType::Dir);
+        assert_eq!("hello1~1.txt", short_name);
+        dir.sub_dirs.write().insert(name1.to_string(), dir.clone());
+        let short_name = dir.name_to_short_name(name1, DirEntryType::Dir);
+        assert_eq!("hello1~2.txt", short_name);
     }
     #[test]
-    fn test_make_entry(){
+    fn test_make_entry() {
         let dir = make_dir();
         let name1 = "hello1234.txt";
-        let short_name = dir.name_to_short_name(name1,DirEntryType::File);
-        let (short_entry,full_long_entry) = dir.make_entry(name1,&short_name,0,DirEntryType::File).unwrap();
-        assert_eq!(short_entry.start_cluster(),0);
-        assert_eq!(short_entry.filename(),short_name.to_uppercase());
-        assert_eq!(short_entry.attr(),&EntryFlags::ARCHIVE);
-        assert_eq!(full_long_entry.filename(),name1);
-        assert_eq!(full_long_entry.len(),1);
-        full_long_entry.iter().for_each(|long_entry|{
-            assert_eq!(long_entry.check_sum(),short_entry.check_sum());
+        let short_name = dir.name_to_short_name(name1, DirEntryType::File);
+        let (short_entry, full_long_entry) = dir
+            .make_entry(name1, &short_name, 0, DirEntryType::File)
+            .unwrap();
+        assert_eq!(short_entry.start_cluster(), 0);
+        assert_eq!(short_entry.filename(), short_name.to_uppercase());
+        assert_eq!(short_entry.attr(), &EntryFlags::ARCHIVE);
+        assert_eq!(full_long_entry.filename(), name1);
+        assert_eq!(full_long_entry.len(), 1);
+        full_long_entry.iter().for_each(|long_entry| {
+            assert_eq!(long_entry.check_sum(), short_entry.check_sum());
         })
     }
 }

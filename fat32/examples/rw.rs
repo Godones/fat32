@@ -1,7 +1,7 @@
+use fat32::{BlockDevice, DirectoryLike, Fat32, FileLike};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, Write};
 use std::sync::{Arc, Mutex};
-use fat32::{BlockDevice, DirectoryLike, Fat32, FileLike};
 
 fn main() {
     let device = FakeDevice::new("fat32-test/test.img");
@@ -20,8 +20,6 @@ fn main() {
     println!("txt: {}", core::str::from_utf8(txt.as_slice()).unwrap());
     fat32.sync();
 }
-
-
 
 #[derive(Debug, Clone)]
 pub struct FakeDevice {

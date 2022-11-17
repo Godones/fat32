@@ -215,7 +215,7 @@ impl ShortEntry {
     pub fn check_sum(&self) -> u8 {
         let mut sum = 0u8;
         for &byte in self.name.iter() {
-            sum = ((sum & 1) << 7) + (sum >> 1) + byte ;
+            sum = ((sum & 1) << 7) + (sum >> 1) + byte;
         }
         for &byte in self.ext.iter() {
             sum = ((sum & 1) << 7) + (sum >> 1) + byte;

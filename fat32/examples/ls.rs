@@ -1,7 +1,7 @@
+use fat32::{BlockDevice, DirectoryLike, Fat32};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, Write};
 use std::sync::{Arc, Mutex};
-use fat32::{BlockDevice, DirectoryLike, Fat32};
 
 fn main() {
     let device = FakeDevice::new("fat32-test/test.img");
@@ -10,7 +10,7 @@ fn main() {
     let _ans = root.create_file("test.txt");
     let ans = root.create_dir("test");
     println!("{:?}", ans);
-    root.list().unwrap().iter().for_each(|name|{
+    root.list().unwrap().iter().for_each(|name| {
         println!("{}", name);
     });
     fat32.sync();
