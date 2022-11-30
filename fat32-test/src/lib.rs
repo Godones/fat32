@@ -1,6 +1,7 @@
 #![feature(associated_type_bounds)]
-#![feature(test)]
-
+#![allow(unused)]
+use crate::device::FakeDevice;
+use mfat32::Fat32;
 mod device;
 mod logging;
 mod other_fat32;
@@ -9,9 +10,9 @@ mod test2_read_write;
 mod test3_delete;
 mod test4_rename;
 
-use crate::device::FakeDevice;
-use fat32_trait::{DirectoryLike, FileLike};
-use mfat32::Fat32;
+
+
+
 
 #[test]
 fn intergenerational_test() {

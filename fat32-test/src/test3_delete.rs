@@ -1,7 +1,7 @@
 use fat32_trait::DirectoryLike;
-use mfat32::Dir;
+
 use std::error::Error;
-use std::fmt::Debug;
+
 use std::sync::Arc;
 
 pub fn test_delete_file_and_dir(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {

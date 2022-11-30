@@ -1,7 +1,7 @@
 use fat32_trait::DirectoryLike;
-use mfat32::Dir;
+
 use std::error::Error;
-use std::fmt::Debug;
+
 use std::sync::Arc;
 
 pub fn test2_read_write(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
@@ -33,7 +33,7 @@ fn test_write_small_file(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) 
     assert!(ans.is_ok());
     let test_write_file = root.open("test_write_file");
     assert!(test_write_file.is_ok());
-    let mut test_write_file = test_write_file.unwrap();
+    let test_write_file = test_write_file.unwrap();
     let ans = test_write_file.write(0, &[1, 2, 3, 4, 5]);
     assert!(ans.is_ok());
     let content = test_write_file.read(0, 10);
@@ -55,7 +55,7 @@ fn test_write_large_file(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) 
     assert!(ans.is_ok());
     let test_write_large_file = root.open("test_write_large_file");
     let data = [0x12; 512 * 10];
-    let mut test_write_large_file = test_write_large_file.unwrap();
+    let test_write_large_file = test_write_large_file.unwrap();
     test_write_large_file.write(0, &data);
     let content = test_write_large_file.read(512, 10);
     assert!(content.is_ok());
@@ -77,7 +77,7 @@ fn test_read_multi_thread(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>)
     assert!(test_read_multi_thread.is_ok());
     let test_read_multi_thread = test_read_multi_thread.unwrap();
     test_read_multi_thread.write(0, &[0x22; 512]);
-    let threads = (0..10)
+    let _threads = (0..10)
         .map(|_| {
             let test_read_multi_thread = test_read_multi_thread.clone();
             std::thread::spawn(move || {
@@ -120,10 +120,10 @@ fn test_write_multi_thread(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>
 }
 
 fn test_clear_file(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
-    let ans = root.create_file("test_clear_file").unwrap();
+    let _ans = root.create_file("test_clear_file").unwrap();
     let test_clear_file = root.open("test_clear_file");
     assert!(test_clear_file.is_ok());
-    let mut test_clear_file = test_clear_file.unwrap();
+    let test_clear_file = test_clear_file.unwrap();
     test_clear_file.write(0, &[0x12; 512]);
     test_clear_file.clear();
     let content = test_clear_file.read(0, 512).unwrap();

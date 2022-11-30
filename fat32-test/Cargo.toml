@@ -12,18 +12,7 @@ log = "0.4.14"
 fat32-trait = {path="../fat32-trait"}
 
 
-
-
-
-
-block_device = "0.1.3"
+[dev-dependencies]
 fscommon = "0.1.1"
 fatfs = { git = "https://github.com/rafalh/rust-fatfs",version = "0.4" }
 
-
-
-[dev-dependencies]
-criterion = "0.3.5"
-[[bench]]
-name = "fat32-bench"
-harness = false
