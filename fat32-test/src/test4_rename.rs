@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-pub fn test_rename(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+pub fn test_rename(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let new_dir = root.create_dir("test_rename");
     assert!(new_dir.is_ok());
     let root = root.cd("test_rename").unwrap();

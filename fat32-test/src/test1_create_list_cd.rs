@@ -1,17 +1,15 @@
 use fat32_trait::DirectoryLike;
-use mfat32::Dir;
 use std::error::Error;
-use std::fmt::Debug;
 use std::sync::Arc;
 
-pub fn test1_create_list_cd(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+pub fn test1_create_list_cd(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     test_create_file_and_dir(root.clone());
     test_create_fail(root.clone());
     test_cd_dir(root.clone());
     test_multi_cd_dir(root.clone());
 }
 
-fn test_create_file_and_dir(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_create_file_and_dir(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_file("test_create_file_and_dir");
     assert!(ans.is_ok());
     let ans = root.create_dir("test_create_file_and_dir");
@@ -21,7 +19,7 @@ fn test_create_file_and_dir(root: Arc<dyn DirectoryLike<Error: Error + Debug + '
     println!("test_create_file_and_dir passed");
 }
 
-fn test_create_fail(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_create_fail(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_file("test_create_fail");
     assert!(ans.is_ok());
     let ans = root.create_file("test_create_fail");
@@ -33,7 +31,7 @@ fn test_create_fail(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>
     println!("test_create_fail passed");
 }
 
-fn test_cd_dir(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_cd_dir(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_dir("test_cd_dir");
     assert!(ans.is_ok());
     let ans = root.cd("test_cd_dir");
@@ -44,7 +42,7 @@ fn test_cd_dir(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
     println!("test_cd_dir passed");
 }
 
-fn test_multi_cd_dir(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_multi_cd_dir(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_dir("test_multi_cd_dir");
     assert!(ans.is_ok());
     let ans = root.cd("test_multi_cd_dir");
@@ -60,7 +58,7 @@ fn test_multi_cd_dir(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>
     println!("test_multi_cd_dir passed");
 }
 
-fn test_multi_thread_create(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_multi_thread_create(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_dir("test_multi_thread_create");
     assert!(ans.is_ok());
     let root_thread = root.clone();

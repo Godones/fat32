@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-pub fn test2_read_write(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+pub fn test2_read_write(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     test_read_empty_file(root.clone());
     test_write_small_file(root.clone());
     test_write_large_file(root.clone());
@@ -13,7 +13,7 @@ pub fn test2_read_write(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'stat
     test_clear_file(root.clone());
 }
 
-fn test_read_empty_file(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_read_empty_file(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_file("test_read_file");
     assert!(ans.is_ok());
     let test_read_file = root.open("test_read_file");
@@ -28,7 +28,7 @@ fn test_read_empty_file(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'stat
     println!("test_read_empty_file passed");
 }
 
-fn test_write_small_file(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_write_small_file(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_file("test_write_file");
     assert!(ans.is_ok());
     let test_write_file = root.open("test_write_file");
@@ -50,7 +50,7 @@ fn test_write_small_file(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'sta
     println!("test_write_small_file passed");
 }
 
-fn test_write_large_file(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_write_large_file(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_file("test_write_large_file");
     assert!(ans.is_ok());
     let test_write_large_file = root.open("test_write_large_file");
@@ -70,7 +70,7 @@ fn test_write_large_file(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'sta
     assert_eq!(content, data[512..512 + 10]);
 }
 
-fn test_read_multi_thread(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_read_multi_thread(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_file("test_read_multi_thread");
     assert!(ans.is_ok());
     let test_read_multi_thread = root.open("test_read_multi_thread");
@@ -92,7 +92,7 @@ fn test_read_multi_thread(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'st
     println!("test_read_multi_thread passed");
 }
 
-fn test_write_multi_thread(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_write_multi_thread(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_file("test_write_multi_thread");
     assert!(ans.is_ok());
     let test_write_multi_thread = root.open("test_write_multi_thread");
@@ -119,7 +119,7 @@ fn test_write_multi_thread(root: Arc<dyn DirectoryLike<Error: Error + Debug + 's
     println!("test_write_multi_thread passed");
 }
 
-fn test_clear_file(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_clear_file(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_file("test_clear_file").unwrap();
     let test_clear_file = root.open("test_clear_file");
     assert!(test_clear_file.is_ok());

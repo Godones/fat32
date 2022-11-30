@@ -4,12 +4,12 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-pub fn test_delete_file_and_dir(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+pub fn test_delete_file_and_dir(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     test_delete_file(root.clone());
     test_delete_dir(root.clone());
 }
 
-fn test_delete_file(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_delete_file(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     let ans = root.create_file("test_delete_file");
     assert!(ans.is_ok());
     let ans = root.delete_file("test_delete_file");
@@ -38,7 +38,7 @@ fn test_delete_file(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>
     println!("test_delete_file passed");
 }
 
-fn test_delete_dir(root: Arc<dyn DirectoryLike<Error: Error + Debug + 'static>>) {
+fn test_delete_dir(root: Arc<dyn DirectoryLike<Error: Error  + 'static>>) {
     root.create_dir("test_delete_dir").unwrap();
     let dir = root.cd("test_delete_dir").unwrap();
     dir.create_dir("sub_test_delete_dir").unwrap();
