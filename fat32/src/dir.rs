@@ -13,8 +13,10 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cmp::{max, min};
-use core::fmt::Debug;
+use core::error::Error;
+use core::fmt::{Debug, Display, Formatter};
 use core::ops::Range;
+use fat32_trait::{DirectoryLike, FileLike};
 use log::{info, trace};
 use spin::RwLock;
 
@@ -610,7 +612,10 @@ impl DirectoryLike for Dir {
 
     /// 进入子目录
     /// will cd to dir2
-    fn cd(&self, path: &str) -> Result<Arc<Dir>, OperationError> {
+    fn cd(
+        &self,
+        path: &str,
+    ) -> Result<Arc<dyn DirectoryLike<Error = Self::Error>>, OperationError> {
         let dir = self
             .sub_dirs
             .read()
@@ -622,7 +627,7 @@ impl DirectoryLike for Dir {
         Ok(dir)
     }
 
-    fn open(&self, name: &str) -> Result<Arc<File>, OperationError> {
+    fn open(&self, name: &str) -> Result<Arc<dyn FileLike<Error = Self::Error>>, OperationError> {
         self.files
             .read()
             .get(name)
@@ -758,16 +763,7 @@ impl File {
         let new_size = max(size, offset + w_size);
         (need_cluster as usize, new_size)
     }
-    pub fn size(&self) -> u32 {
-        let cache = get_block_cache_by_id(self.address.0);
-        info!("file at :({},{})", self.address.0, self.address.1);
-        let mut size = 0;
-        cache.read(0, |content: &Content| {
-            let content = content.read();
-            size = u32_from_le_bytes(&content[self.address.1 + 28..self.address.1 + 32]);
-        });
-        size
-    }
+
     fn update_size(&self, size: u32) {
         let cache = get_block_cache_by_id(self.address.0);
         cache.write(0, |content: &mut Content| {
@@ -887,6 +883,16 @@ impl FileLike for File {
         // 更新文件大小
         self.update_size(0);
     }
+    fn size(&self) -> u32 {
+        let cache = get_block_cache_by_id(self.address.0);
+        info!("file at :({},{})", self.address.0, self.address.1);
+        let mut size = 0;
+        cache.read(0, |content: &Content| {
+            let content = content.read();
+            size = u32_from_le_bytes(&content[self.address.1 + 28..self.address.1 + 32]);
+        });
+        size
+    }
 }
 
 #[derive(PartialOrd, PartialEq, Debug)]
@@ -897,27 +903,27 @@ pub enum DirEntryType {
     Dir,
 }
 
-/// 文件夹和普通文件都被视作文件
-/// 但是文件夹可以有子文件夹和子文件，而普通文件只能读取/删除/写入数据
-pub trait DirectoryLike:Debug+Send+Sync {
-    type Error;
-    fn create_dir(&self, name: &str) -> Result<(), Self::Error>;
-    fn create_file(&self, name: &str) -> Result<(), Self::Error>;
-    fn delete_dir(&self, name: &str) -> Result<(), Self::Error>;
-    fn delete_file(&self, name: &str) -> Result<(), Self::Error>;
-    fn cd(&self, name: &str) -> Result<Arc<Dir>, Self::Error>;
-    fn open(&self, name: &str) -> Result<Arc<File>, Self::Error>;
-    fn list(&self) -> Result<Vec<String>, Self::Error>;
-    fn rename_file(&self, old_name: &str, new_name: &str) -> Result<(), Self::Error>;
-    fn rename_dir(&self, old_name: &str, new_name: &str) -> Result<(), Self::Error>;
-}
-
-pub trait FileLike :Debug+Send+Sync{
-    type Error;
-    fn read(&self, offset: u32, size: u32) -> Result<Vec<u8>, Self::Error>;
-    fn write(&self, offset: u32, data: &[u8]) -> Result<u32, Self::Error>;
-    fn clear(&self);
-}
+// /// 文件夹和普通文件都被视作文件
+// /// 但是文件夹可以有子文件夹和子文件，而普通文件只能读取/删除/写入数据
+// pub trait DirectoryLike:Debug+Send+Sync {
+//     type Error;
+//     fn create_dir(&self, name: &str) -> Result<(), Self::Error>;
+//     fn create_file(&self, name: &str) -> Result<(), Self::Error>;
+//     fn delete_dir(&self, name: &str) -> Result<(), Self::Error>;
+//     fn delete_file(&self, name: &str) -> Result<(), Self::Error>;
+//     fn cd(&self, name: &str) -> Result<Arc<Dir>, Self::Error>;
+//     fn open(&self, name: &str) -> Result<Arc<File>, Self::Error>;
+//     fn list(&self) -> Result<Vec<String>, Self::Error>;
+//     fn rename_file(&self, old_name: &str, new_name: &str) -> Result<(), Self::Error>;
+//     fn rename_dir(&self, old_name: &str, new_name: &str) -> Result<(), Self::Error>;
+// }
+//
+// pub trait FileLike :Debug+Send+Sync{
+//     type Error;
+//     fn read(&self, offset: u32, size: u32) -> Result<Vec<u8>, Self::Error>;
+//     fn write(&self, offset: u32, data: &[u8]) -> Result<u32, Self::Error>;
+//     fn clear(&self);
+// }
 
 #[derive(Debug)]
 pub enum OperationError {
@@ -930,6 +936,14 @@ pub enum OperationError {
     InvalidDirName,
     NotFound,
 }
+
+impl Display for OperationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Error for OperationError {}
 
 #[cfg(test)]
 mod tests {

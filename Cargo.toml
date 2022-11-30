@@ -3,5 +3,6 @@
 members = [
 	"fat32",
 	"fat32-test",
-	"fat32-ffi"
+	"fat32-ffi",
+	"fat32-trait"
 ]

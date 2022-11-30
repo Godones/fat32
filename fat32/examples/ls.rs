@@ -1,4 +1,5 @@
-use fat32::{BlockDevice, DirectoryLike, Fat32};
+use fat32::{BlockDevice, Fat32};
+use fat32_trait::DirectoryLike;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, Write};
 use std::sync::{Arc, Mutex};
